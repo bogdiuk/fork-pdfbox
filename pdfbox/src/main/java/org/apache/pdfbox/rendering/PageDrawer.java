@@ -553,7 +553,9 @@ public class PageDrawer extends PDFGraphicsStreamEngine
                 if (renderingMode.isFill())
                 {
                     graphics.setComposite(state.getNonStrokingJavaComposite());
-                    graphics.setPaint(getNonStrokingPaint());
+                    graphics.setPaint(coalesce(
+                            getOverridePaintForGlyph(true, path, font, code, displacement, at),
+                            this::getNonStrokingPaint));
                     setClip();
                     graphics.fill(glyph);
                 }
@@ -561,7 +563,9 @@ public class PageDrawer extends PDFGraphicsStreamEngine
                 if (renderingMode.isStroke())
                 {
                     graphics.setComposite(state.getStrokingJavaComposite());
-                    graphics.setPaint(getStrokingPaint());
+                    graphics.setPaint(coalesce(
+                            getOverridePaintForGlyph(false, path, font, code, displacement, at),
+                            this::getStrokingPaint));
                     graphics.setStroke(getStroke());
                     setClip();
                     graphics.draw(glyph);
@@ -798,7 +802,7 @@ public class PageDrawer extends PDFGraphicsStreamEngine
         if (isContentRendered())
         {
             graphics.setComposite(getGraphicsState().getStrokingJavaComposite());
-            graphics.setPaint(getStrokingPaint());
+            graphics.setPaint(coalesce(getOverridePaintFor(PaintContext.StrokePath), this::getStrokingPaint));
             graphics.setStroke(getStroke());
             setClip();
             graphics.draw(linePath);
@@ -847,7 +851,7 @@ public class PageDrawer extends PDFGraphicsStreamEngine
         if (isContentRendered() && !shape.getPathIterator(null).isDone())
         {
             // creating Paint is sometimes a costly operation, so avoid if possible
-            graphics.setPaint(getNonStrokingPaint());
+            graphics.setPaint(coalesce(getOverridePaintForFillPath(linePath), this::getNonStrokingPaint));
             graphics.fill(shape);
         }
         
@@ -1132,7 +1136,6 @@ public class PageDrawer extends PDFGraphicsStreamEngine
                 // If anybody wants to do this, have a look at the code in showTransparencyGroup().
 
                 // draw the paint
-                Paint paint = getNonStrokingPaint();
                 Rectangle2D unitRect = new Rectangle2D.Float(0, 0, 1, 1);
                 Rectangle2D bounds = at.createTransformedShape(unitRect).getBounds2D();
                 int w = (int) Math.ceil(bounds.getWidth());
@@ -1140,7 +1143,7 @@ public class PageDrawer extends PDFGraphicsStreamEngine
                 BufferedImage renderedPaint = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB);
                 Graphics2D g = (Graphics2D) renderedPaint.getGraphics();
                 g.translate(-bounds.getMinX(), -bounds.getMinY());
-                g.setPaint(paint);
+                graphics.setPaint(coalesce(getOverridePaintFor(PaintContext.ImageBackground), this::getNonStrokingPaint));
                 g.setRenderingHints(graphics.getRenderingHints());
                 g.fill(bounds);
                 g.dispose();
@@ -1316,9 +1319,11 @@ public class PageDrawer extends PDFGraphicsStreamEngine
         if (softMask != null && !hasImageMask)
         {
             Rectangle2D rectangle = new Rectangle2D.Float(0, 0, width, height);
-            Paint awtPaint = new TexturePaint(image, rectangle);
-            awtPaint = applySoftMaskToPaint(awtPaint, softMask);
-            graphics.setPaint(awtPaint);
+            final BufferedImage texture = image;
+            graphics.setPaint(coalesce(getOverridePaintFor(PaintContext.ImageSoftMask), () -> {
+                Paint awtPaint = new TexturePaint(texture, rectangle);
+                return applySoftMaskToPaint(awtPaint, softMask);
+            }));
             graphics.transform(imageTransform);
             graphics.fill(rectangle);
             graphics.setTransform(originalTransform);
@@ -1533,10 +1538,11 @@ public class PageDrawer extends PDFGraphicsStreamEngine
         }
         if (!area.isEmpty())
         {
+            graphics.setPaint(coalesce(getOverridePaintFor(PaintContext.ShadingFill), () -> {
             // creating Paint is sometimes a costly operation, so avoid if possible
             Paint paint = shading.toPaint(ctm);
-            paint = applySoftMaskToPaint(paint, getGraphicsState().getSoftMask());
-            graphics.setPaint(paint);
+                return applySoftMaskToPaint(paint, getGraphicsState().getSoftMask());
+            }));
             graphics.fill(area);
         }
         graphics.setClip(savedClip);
@@ -1719,10 +1725,11 @@ public class PageDrawer extends PDFGraphicsStreamEngine
         PDSoftMask softMask = getGraphicsState().getSoftMask();
         if (softMask != null)
         {
+            graphics.setPaint(coalesce(getOverridePaintFor(PaintContext.TransparencyGroup), () -> {
             Paint awtPaint = new TexturePaint(image,
                     new Rectangle2D.Float(0, 0, image.getWidth(), image.getHeight()));
-            awtPaint = applySoftMaskToPaint(awtPaint, softMask);
-            graphics.setPaint(awtPaint);
+                return applySoftMaskToPaint(awtPaint, softMask);
+            }));
             graphics.fill(
                     new Rectangle2D.Float(0, 0, bbox.getWidth() * xformScalingFactorX, bbox.getHeight() * xformScalingFactorY));
         }
@@ -2150,12 +2157,13 @@ public class PageDrawer extends PDFGraphicsStreamEngine
         return false;
     }
 
-    private boolean isHiddenOCMD(PDOptionalContentMembershipDictionary ocmd)
+    //<editor-fold defaultstate="collapsed" desc="helper functions for isHiddenOCG(), recursive">
+    private static boolean isHiddenOCMD(PDDocument document, RenderDestination destination, PDOptionalContentMembershipDictionary ocmd)
     {
         COSArray veArray = ocmd.getCOSObject().getCOSArray(COSName.VE);
         if (veArray != null && veArray.size() > 0)
         {
-            return isHiddenVisibilityExpression(veArray);
+            return isHiddenVisibilityExpression(document, destination, veArray);
         }
         List<PDPropertyList> oCGs = ocmd.getOCGs();
         if (oCGs.isEmpty())
@@ -2189,7 +2197,7 @@ public class PageDrawer extends PDFGraphicsStreamEngine
         return visibles.stream().noneMatch(v -> v);
     }
 
-    private boolean isHiddenVisibilityExpression(COSArray veArray)
+    private static boolean isHiddenVisibilityExpression(PDDocument document, RenderDestination destination, COSArray veArray)
     {
         if (veArray.size() == 0)
         {
@@ -2203,17 +2211,17 @@ public class PageDrawer extends PDFGraphicsStreamEngine
         switch (op)
         {
             case "And":
-                return isHiddenAndVisibilityExpression(veArray);
+                return isHiddenAndVisibilityExpression(document, destination, veArray);
             case "Or":
-                return isHiddenOrVisibilityExpression(veArray);
+                return isHiddenOrVisibilityExpression(document, destination, veArray);
             case "Not":
-                return isHiddenNotVisibilityExpression(veArray);
+                return isHiddenNotVisibilityExpression(document, destination, veArray);
             default:
                 return false;
         }
     }
 
-    private boolean isHiddenAndVisibilityExpression(COSArray veArray)
+    private static boolean isHiddenAndVisibilityExpression(PDDocument document, RenderDestination destination, COSArray veArray)
     {
         // hidden if at least one isn't visible
         for (int i = 1; i < veArray.size(); ++i)
@@ -2222,7 +2230,7 @@ public class PageDrawer extends PDFGraphicsStreamEngine
             if (base instanceof COSArray)
             {
                 // Another VE
-                boolean isHidden = isHiddenVisibilityExpression((COSArray) base);
+                boolean isHidden = isHiddenVisibilityExpression(document, destination, (COSArray) base);
                 if (isHidden)
                 {
                     return true;
@@ -2232,7 +2240,7 @@ public class PageDrawer extends PDFGraphicsStreamEngine
             {
                 // Another OCG
                 PDPropertyList prop = PDPropertyList.create((COSDictionary) base);
-                boolean isHidden = isHiddenOCG(prop);
+                boolean isHidden = isHiddenOCG(document, destination, prop);
                 if (isHidden)
                 {
                     return true;
@@ -2242,7 +2250,7 @@ public class PageDrawer extends PDFGraphicsStreamEngine
         return false;
     }
 
-    private boolean isHiddenOrVisibilityExpression(COSArray veArray)
+    private static boolean isHiddenOrVisibilityExpression(PDDocument document, RenderDestination destination, COSArray veArray)
     {
         // hidden only if all are hidden
         for (int i = 1; i < veArray.size(); ++i)
@@ -2251,7 +2259,7 @@ public class PageDrawer extends PDFGraphicsStreamEngine
             if (base instanceof COSArray)
             {
                 // Another VE
-                boolean isHidden = isHiddenVisibilityExpression((COSArray) base);
+                boolean isHidden = isHiddenVisibilityExpression(document, destination, (COSArray) base);
                 if (!isHidden)
                 {
                     return false;
@@ -2261,7 +2269,7 @@ public class PageDrawer extends PDFGraphicsStreamEngine
             {
                 // Another OCG
                 PDPropertyList prop = PDPropertyList.create((COSDictionary) base);
-                boolean isHidden = isHiddenOCG(prop);
+                boolean isHidden = isHiddenOCG(document, destination, prop);
                 if (!isHidden)
                 {
                     return false;
@@ -2271,7 +2279,7 @@ public class PageDrawer extends PDFGraphicsStreamEngine
         return true;
     }
 
-    private boolean isHiddenNotVisibilityExpression(COSArray veArray)
+    private static boolean isHiddenNotVisibilityExpression(PDDocument document, RenderDestination destination, COSArray veArray)
     {
         if (veArray.size() != 2)
         {
@@ -2281,16 +2289,17 @@ public class PageDrawer extends PDFGraphicsStreamEngine
         if (base instanceof COSArray)
         {
             // Another VE
-            return !isHiddenVisibilityExpression((COSArray) base);
+            return !isHiddenVisibilityExpression(document, destination, (COSArray) base);
         }
         else if (base instanceof COSDictionary)
         {
             // Another OCG
             PDPropertyList prop = PDPropertyList.create((COSDictionary) base);
-            return !isHiddenOCG(prop);
+            return !isHiddenOCG(document, destination, prop);
         }
         return false;
     }
+    //</editor-fold>
 
     private LookupTable getInvLookupTable()
     {
@@ -2304,5 +2313,44 @@ public class PageDrawer extends PDFGraphicsStreamEngine
             invTable = new ByteLookupTable(0, inv);
         }
         return invTable;
+    }
+
+    /** Override it to customize shape colours */
+    protected Paint getOverridePaintFor(PaintContext context)
+    {
+        return null;
+    }
+
+    /** Override it to customize text colour */
+    protected Paint getOverridePaintForGlyph(boolean filling, GeneralPath path, PDFont font, int code, Vector displacement, AffineTransform at)
+    {
+        return null;
+    }
+
+    /** Override it to customize FillPath shape colour */
+    protected Paint getOverridePaintForFillPath(GeneralPath unclippedShape)
+    {
+        return null;
+    }
+
+    private static Paint coalesce(/*@Nullable*/Paint override, LazyPaint original) throws IOException
+    {
+        return override != null ? override : original.getPaint();
+    }
+
+    private interface LazyPaint
+    {
+        /** @return {@link #applySoftMaskToPaint} */
+        Paint getPaint() throws IOException;
+    }
+
+    public enum PaintContext
+    {
+        StrokePath,
+//        FillPath, // separate method 'getPaintForFillPath(...)'
+        ImageBackground,
+        ImageSoftMask,
+        ShadingFill,
+        TransparencyGroup,
     }
 }
