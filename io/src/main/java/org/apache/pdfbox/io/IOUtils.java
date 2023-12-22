@@ -55,6 +55,11 @@ public final class IOUtils
 {
     private static final StreamCacheCreateFunction streamCache = RandomAccessStreamCacheImpl::new;
 
+    /**
+     * Log instance.
+     */
+    private static final Log LOG = LogFactory.getLog(IOUtils.class);
+
     //TODO PDFBox should really use Apache Commons IO.
     private static final Optional<Consumer<ByteBuffer>> UNMAPPER;
 
@@ -63,11 +68,6 @@ public final class IOUtils
         UNMAPPER = Optional.ofNullable(AccessController
                 .doPrivileged((PrivilegedAction<Consumer<ByteBuffer>>) IOUtils::unmapper));
     }
-
-    /**
-     * Log instance.
-     */
-    private static final Log LOG = LogFactory.getLog(IOUtils.class);
 
     private IOUtils()
     {
