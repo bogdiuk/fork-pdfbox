@@ -555,7 +555,7 @@ public class PageDrawer extends PDFGraphicsStreamEngine
                 if (renderingMode.isFill())
                 {
                     graphics.setComposite(state.getNonStrokingJavaComposite());
-                    graphics.setPaint(getNonStrokingPaint());
+                    graphics.setPaint(getPaintForGlyph(true, getNonStrokingPaint(), path, font, code, displacement, at));
                     setClip();
                     graphics.fill(glyph);
                 }
@@ -563,7 +563,7 @@ public class PageDrawer extends PDFGraphicsStreamEngine
                 if (renderingMode.isStroke())
                 {
                     graphics.setComposite(state.getStrokingJavaComposite());
-                    graphics.setPaint(getStrokingPaint());
+                    graphics.setPaint(getPaintForGlyph(false, getStrokingPaint(), path, font, code, displacement, at));
                     graphics.setStroke(getStroke());
                     setClip();
                     graphics.draw(glyph);
@@ -800,7 +800,7 @@ public class PageDrawer extends PDFGraphicsStreamEngine
         if (isContentRendered())
         {
             graphics.setComposite(getGraphicsState().getStrokingJavaComposite());
-            graphics.setPaint(getStrokingPaint());
+            graphics.setPaint(getPaintFor(PaintContext.StrokePath, getStrokingPaint()));
             graphics.setStroke(getStroke());
             setClip();
             graphics.draw(linePath);
@@ -849,7 +849,7 @@ public class PageDrawer extends PDFGraphicsStreamEngine
         if (isContentRendered() && !shape.getPathIterator(null).isDone())
         {
             // creating Paint is sometimes a costly operation, so avoid if possible
-            graphics.setPaint(getNonStrokingPaint());
+            graphics.setPaint(getPaintFor(PaintContext.FillPath, getNonStrokingPaint()));
             graphics.fill(shape);
         }
         
@@ -1142,7 +1142,7 @@ public class PageDrawer extends PDFGraphicsStreamEngine
                 BufferedImage renderedPaint = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB);
                 Graphics2D g = (Graphics2D) renderedPaint.getGraphics();
                 g.translate(-bounds.getMinX(), -bounds.getMinY());
-                g.setPaint(paint);
+                graphics.setPaint(getPaintFor(PaintContext.ImageBackground, paint));
                 g.setRenderingHints(graphics.getRenderingHints());
                 g.fill(bounds);
                 g.dispose();
@@ -1312,7 +1312,7 @@ public class PageDrawer extends PDFGraphicsStreamEngine
             Rectangle2D rectangle = new Rectangle2D.Float(0, 0, width, height);
             Paint awtPaint = new TexturePaint(image, rectangle);
             awtPaint = applySoftMaskToPaint(awtPaint, softMask);
-            graphics.setPaint(awtPaint);
+            graphics.setPaint(getPaintFor(PaintContext.ImageSoftMask, awtPaint));
             graphics.transform(imageTransform);
             graphics.fill(rectangle);
             graphics.setTransform(originalTransform);
@@ -1530,7 +1530,7 @@ public class PageDrawer extends PDFGraphicsStreamEngine
             // creating Paint is sometimes a costly operation, so avoid if possible
             Paint paint = shading.toPaint(ctm);
             paint = applySoftMaskToPaint(paint, getGraphicsState().getSoftMask());
-            graphics.setPaint(paint);
+            graphics.setPaint(getPaintFor(PaintContext.ShadingFill, paint));
             graphics.fill(area);
         }
         graphics.setClip(savedClip);
@@ -1680,7 +1680,7 @@ public class PageDrawer extends PDFGraphicsStreamEngine
             Paint awtPaint = new TexturePaint(image,
                     new Rectangle2D.Float(0, 0, image.getWidth(), image.getHeight()));
             awtPaint = applySoftMaskToPaint(awtPaint, softMask);
-            graphics.setPaint(awtPaint);
+            graphics.setPaint(getPaintFor(PaintContext.TransparencyGroup, awtPaint));
             graphics.fill(
                     new Rectangle2D.Float(0, 0, bbox.getWidth() * xformScalingFactorX, bbox.getHeight() * xformScalingFactorY));
         }
@@ -2149,5 +2149,30 @@ public class PageDrawer extends PDFGraphicsStreamEngine
             invTable = new ByteLookupTable(0, inv);
         }
         return invTable;
+    }
+
+    /** Override it to customize shape colours */
+    protected Paint getPaintFor(PaintContext context, Paint original)
+    {
+        return original;
+    }
+
+    /** Override it to customize text colour */
+    protected Paint getPaintForGlyph(boolean filling, Paint original, GeneralPath path, PDFont font, int code, Vector displacement, AffineTransform at) throws IOException
+    {
+        return original;
+    }
+
+    public enum PaintContext
+    {
+        // Stroking
+        StrokePath,
+        // NonStroking
+        FillPath,
+        ImageBackground,
+        // Other
+        ImageSoftMask,
+        ShadingFill,
+        TransparencyGroup,
     }
 }
