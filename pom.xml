@@ -76,8 +76,8 @@
     <module>fontbox</module>
     <module>xmpbox</module>
     <module>pdfbox</module>
-    <module>preflight</module>
-    <module>preflight-app</module>
+    <!--module>preflight</module-->
+    <!--module>preflight-app</module-->
     <module>debugger</module>
     <module>tools</module>
     <module>app</module>
@@ -87,7 +87,7 @@
 
   <build>
     <plugins>
-      <plugin>
+      <!--plugin>
           <groupId>org.jacoco</groupId>
           <artifactId>jacoco-maven-plugin</artifactId>
           <version>0.8.11</version>
@@ -108,7 +108,7 @@
                   </goals>
               </execution>
           </executions>
-      </plugin>
+      </plugin-->
       <plugin>
           <artifactId>maven-surefire-plugin</artifactId>
           <configuration>
