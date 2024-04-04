@@ -98,6 +98,7 @@ public final class OverlayPDF implements Callable<Integer>
     }
 
 
+    @Override
     public Integer call()
     {
         int retcode = 0;
@@ -128,6 +129,16 @@ public final class OverlayPDF implements Callable<Integer>
         if (useAllPages != null)
         {
             overlayer.setAllPagesOverlayFile(useAllPages.getAbsolutePath());
+        }
+
+        if (defaultOverlay != null)
+        {
+            overlayer.setDefaultOverlayFile(defaultOverlay.getAbsolutePath());
+        }
+
+        if (infile != null)
+        {
+            overlayer.setInputFile(infile.getAbsolutePath());
         }
 
 

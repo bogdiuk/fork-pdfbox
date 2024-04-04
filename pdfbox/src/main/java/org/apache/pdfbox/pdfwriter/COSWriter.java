@@ -183,8 +183,6 @@ public class COSWriter implements ICOSVisitor
 
     // the current object number
     private long number = 0;
-    // indicates whether existing object keys should be reused or not
-    private boolean reuseObjectNumbers = true;
 
     // maps the object to the keys generated in the writer
     // these are used for indirect references in other objects
@@ -272,9 +270,6 @@ public class COSWriter implements ICOSVisitor
         // write to buffer instead of output
         setOutput(new ByteArrayOutputStream());
         setStandardOutput(new COSStandardOutputStream(output, inputData.length()));
-        // don't reuse object numbers to avoid overlapping keys
-        // as inputData already contains a lot of objects
-        reuseObjectNumbers = false;
         // disable compressed object streams
         compressParameters = CompressParameters.NO_COMPRESSION;
         incrementalInput = inputData;
@@ -860,9 +855,12 @@ public class COSWriter implements ICOSVisitor
     private void doWriteIncrement() throws IOException
     {
         // write existing PDF
-        IOUtils.copy(new RandomAccessInputStream(incrementalInput), incrementalOutput);
-        // write the actual incremental update
-        incrementalOutput.write(((ByteArrayOutputStream) output).toByteArray());
+        try (RandomAccessInputStream input = new RandomAccessInputStream(incrementalInput))
+        {
+            IOUtils.copy(input, incrementalOutput);
+            // write the actual incremental update
+            incrementalOutput.write(((ByteArrayOutputStream) output).toByteArray());
+        }
     }
     
     private void doWriteSignature() throws IOException
@@ -1070,23 +1068,43 @@ public class COSWriter implements ICOSVisitor
      */
     private COSObjectKey getObjectKey( COSBase obj )
     {
-        COSBase actual = obj;
-        if( actual instanceof COSObject )
+        COSObjectKey key = obj.getKey();
+        COSBase actual;
+        if (obj instanceof COSObject)
         {
-            if (reuseObjectNumbers)
-            {
-                COSObjectKey key = obj.getKey();
-                if (key != null)
-                {
-                    objectKeys.put(obj, key);
-                    return key;
-                }
-            }
             actual = ((COSObject) obj).getObject();
+            if (actual == null)
+            {
+                // the referenced object isn't there due to a malformed pdf
+                // check if a key is present, otherwise create a new one
+                if (key == null)
+                {
+                    key = new COSObjectKey(++number, 0);
+                }
+                objectKeys.put(obj, key);
+                return key;
+            }
         }
-        // PDFBOX-4540: because objectKeys is accessible from outside, it is possible
-        // that a COSObject obj is already in the objectKeys map.
-        return objectKeys.computeIfAbsent(actual, k -> new COSObjectKey(++number, 0));
+        else
+        {
+            actual = obj;
+        }
+        COSObjectKey actualKey = objectKeys.computeIfAbsent(actual,
+                k -> new COSObjectKey(++number, 0));
+        // check if the returned key and the origin key of the given object are the same
+        if (key == null || (actualKey != null && !key.equals(actualKey)))
+        {
+            // update the object key given object/referenced object
+            key = actualKey;
+            actual.setKey(actualKey);
+            if (obj instanceof COSObject)
+            {
+                // update the object key of the indirect object
+                obj.setKey(key);
+                objectKeys.put(obj, key);
+            }
+        }
+        return key;
     }
 
     @Override

@@ -174,6 +174,7 @@ public class PageDrawer extends PDFGraphicsStreamEngine
     private final RenderingHints renderingHints;
     private final float imageDownscalingOptimizationThreshold;
     private LookupTable invTable = null;
+    private final Map<COSBase,Boolean> blendModeMap = new HashMap<>();
 
     /**
     * Default annotations filter, returns all annotations
@@ -348,7 +349,12 @@ public class PageDrawer extends PDFGraphicsStreamEngine
     protected Paint getPaint(PDColor color) throws IOException
     {
         PDColorSpace colorSpace = color.getColorSpace();
-        if (colorSpace instanceof PDSeparation &&
+        if (colorSpace == null) // PDFBOX-5782
+        {
+            LOG.error("colorSpace is null, will be rendered as transparency");
+            return new Color(0, 0, 0, 0);
+        }
+        else if (colorSpace instanceof PDSeparation &&
                 "None".equals(((PDSeparation) colorSpace).getColorantName()))
         {
             // PDFBOX-4900: "The special colorant name None shall not produce any visible output"
@@ -612,7 +618,8 @@ public class PageDrawer extends PDFGraphicsStreamEngine
             {
                 PDTransparencyGroup form = softMask.getGroup();
                 PDColorSpace colorSpace = form.getGroup().getColorSpace(form.getResources());
-                if (colorSpace != null)
+                if (colorSpace != null &&
+                    colorSpace.getNumberOfComponents() == backdropColorArray.size()) // PDFBOX-5795
                 {
                     backdropColor = new PDColor(backdropColorArray, colorSpace);
                 }
@@ -1965,14 +1972,21 @@ public class PageDrawer extends PDFGraphicsStreamEngine
     {
         if (groupsDone.contains(group.getCOSObject()))
         {
-            // The group was already processed. Avoid endless recursion.
+            // The group is being processed. Avoid endless recursion.
             return false;
         }
         groupsDone.add(group.getCOSObject());
 
+        Boolean val = blendModeMap.get(group.getCOSObject());
+        if (val != null)
+        {
+            return val;
+        }
+
         PDResources resources = group.getResources();
         if (resources == null)
         {
+            blendModeMap.put(group.getCOSObject(), false);
             return false;
         }
         for (COSName name : resources.getExtGStateNames())
@@ -1985,6 +1999,7 @@ public class PageDrawer extends PDFGraphicsStreamEngine
             BlendMode blendMode = extGState.getBlendMode();
             if (blendMode != BlendMode.NORMAL)
             {
+                blendModeMap.put(group.getCOSObject(), true);
                 return true;
             }
         }
@@ -2004,10 +2019,12 @@ public class PageDrawer extends PDFGraphicsStreamEngine
             if (xObject instanceof PDTransparencyGroup &&
                 hasBlendMode((PDTransparencyGroup)xObject, groupsDone))
             {
+                blendModeMap.put(group.getCOSObject(), true);
                 return true;
             }
         }
 
+        blendModeMap.put(group.getCOSObject(), false);
         return false;
     }
 

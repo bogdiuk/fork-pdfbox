@@ -19,8 +19,10 @@ package org.apache.pdfbox.pdfwriter.compress;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Set;
 
 import org.apache.pdfbox.pdfparser.PDFXRefStream;
 import org.apache.pdfbox.pdmodel.PDDocument;
@@ -53,7 +55,7 @@ public class COSWriterCompressionPool
     // A list containing all objects, that may be appended to an object stream.
     private final List<COSObjectKey> objectStreamObjects = new ArrayList<>();
     // A list of all direct objects
-    private final List<COSBase> allDirectObjects = new ArrayList<>();
+    private final Set<COSBase> allDirectObjects = new HashSet<>();
 
     /**
      * <p>
@@ -127,6 +129,12 @@ public class COSWriterCompressionPool
             {
                 return current;
             }
+            // check if the key of the indirect object matches the key of the referenced object
+            // otherwise update the key
+            if (!actualKey.equals(key) && base instanceof COSObject)
+            {
+                base.setKey(actualKey);
+            }
             topLevelObjects.add(actualKey);
             return current;
         }
@@ -136,6 +144,12 @@ public class COSWriterCompressionPool
         if (actualKey == null)
         {
             return current;
+        }
+        // check if the key of the indirect object matches the key of the referenced object
+        // otherwise update the key
+        if (!actualKey.equals(key) && base instanceof COSObject)
+        {
+            base.setKey(actualKey);
         }
 
         // Append it to an object stream.
@@ -194,7 +208,13 @@ public class COSWriterCompressionPool
                 COSObject cosObject = (COSObject) value;
                 if (cosObject.getKey() != null && objectPool.contains(cosObject.getKey()))
                 {
-                    continue;
+                    // check if the stored object matches the referenced object otherwise replace the key with a new one
+                    // there may differences if some imported content uses the same object numbers than the target pdf
+                    if (objectPool.getObject(cosObject.getKey()).equals(cosObject.getObject()))
+                    {
+                        continue;
+                    }
+                    cosObject.setKey(null);
                 }
                 if (cosObject.getObject() != null)
                 {

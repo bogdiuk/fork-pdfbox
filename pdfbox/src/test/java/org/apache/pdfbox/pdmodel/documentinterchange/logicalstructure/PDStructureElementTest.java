@@ -16,11 +16,11 @@
  */
 package org.apache.pdfbox.pdmodel.documentinterchange.logicalstructure;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import java.io.File;
 import java.io.IOException;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 
 import org.apache.pdfbox.Loader;
@@ -29,7 +29,10 @@ import org.apache.pdfbox.cos.COSBase;
 import org.apache.pdfbox.cos.COSDictionary;
 import org.apache.pdfbox.cos.COSName;
 import org.apache.pdfbox.cos.COSObject;
+import org.apache.pdfbox.io.RandomAccessReadBuffer;
 import org.apache.pdfbox.pdmodel.PDDocument;
+import org.junit.jupiter.api.Assertions;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -49,21 +52,49 @@ class PDStructureElementTest
     void testPDFBox4197() throws IOException
     {
         Set<Revisions<PDAttributeObject>> attributeSet = new HashSet<>();
+        Set<String> classSet = new HashSet<>();
         try (PDDocument doc = Loader.loadPDF(new File(TARGETPDFDIR, "PDFBOX-4197.pdf")))
         {
             PDStructureTreeRoot structureTreeRoot = doc.getDocumentCatalog().getStructureTreeRoot();
-            checkElement(structureTreeRoot.getK(), attributeSet);
+            checkElement(structureTreeRoot.getK(), attributeSet, structureTreeRoot.getClassMap(), classSet);
         }
 
         // collect attributes and check their count.
         assertEquals(117, attributeSet.size());
         int cnt = attributeSet.stream().map(attributes -> attributes.size()).reduce(0, Integer::sum);
         assertEquals(111, cnt); // this one was 105 before PDFBOX-4197 was fixed
+        assertEquals(0, classSet.size());
+    }
+
+    /**
+     * Check that all classes are caught and are in the /ClassMap
+     *
+     * @throws IOException 
+     */
+    @Test
+    void testClassMap() throws IOException
+    {
+        Set<Revisions<PDAttributeObject>> attributeSet = new HashSet<>();
+        Set<String> classSet = new HashSet<>();
+        try (PDDocument doc = Loader.loadPDF(
+                RandomAccessReadBuffer.createBufferFromStream(PDStructureElementTest.class
+                        .getResourceAsStream("PDFBOX-2725-878725.pdf"))))
+        {
+            PDStructureTreeRoot structureTreeRoot = doc.getDocumentCatalog().getStructureTreeRoot();
+            checkElement(structureTreeRoot.getK(), attributeSet, structureTreeRoot.getClassMap(), classSet);
+        }
+
+        // collect attributes and check their count.
+        assertEquals(72, attributeSet.size());
+        int cnt = attributeSet.stream().map(attributes -> attributes.size()).reduce(0, Integer::sum);
+        assertEquals(45, cnt);
+        assertEquals(10, classSet.size());
     }
 
     // Each element can be an array, a dictionary or a number.
     // See PDF specification Table 323 - Entries in a structure element dictionary
-    private void checkElement(COSBase base, Set<Revisions<PDAttributeObject>>attributeSet)
+    private void checkElement(COSBase base, Set<Revisions<PDAttributeObject>>attributeSet,
+            Map<String, Object> classMap, Set<String> classSet)
     {
         if (base instanceof COSArray)
         {
@@ -73,7 +104,7 @@ class PDStructureElementTest
                 {
                     base2 = ((COSObject) base2).getObject();
                 }
-                checkElement(base2, attributeSet);
+                checkElement(base2, attributeSet, classMap, classSet);
             }
         }
         else if (base instanceof COSDictionary)
@@ -85,11 +116,22 @@ class PDStructureElementTest
                 Revisions<PDAttributeObject> attributes = structureElement.getAttributes();
                 attributeSet.add(attributes);
                 Revisions<String> classNames = structureElement.getClassNames();
-                //TODO: modify the test to also check for class names, if we ever have a file.
+
+                // "If both the A and C entries are present and a given attribute is specified by both, 
+                // the one specified by the A entry shall take precedence."
+                if (kdict.containsKey(COSName.C) && !kdict.containsKey(COSName.A))
+                {
+                    for (int i = 0; i < classNames.size(); ++i)
+                    {
+                        String className = classNames.getObject(i);
+                        classSet.add(className);
+                        Assertions.assertTrue(classMap.containsKey(className), "'" + className + "' not in ClassMap " + classMap);
+                    }
+                }
             }
             if (kdict.containsKey(COSName.K))
             {
-                checkElement(kdict.getDictionaryObject(COSName.K), attributeSet);
+                checkElement(kdict.getDictionaryObject(COSName.K), attributeSet, classMap, classSet);
             }
         }
     }    
