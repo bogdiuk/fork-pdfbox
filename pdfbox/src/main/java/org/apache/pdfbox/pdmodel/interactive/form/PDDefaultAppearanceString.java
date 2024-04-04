@@ -49,7 +49,7 @@ import org.apache.pdfbox.pdmodel.interactive.annotation.PDAppearanceStream;
  * 
  * Note: This class is not yet public, as its API is still unstable.
  */
-class PDDefaultAppearanceString
+public class PDDefaultAppearanceString
 {
     /**
      * The default font size used by Acrobat.
@@ -211,7 +211,7 @@ class PDDefaultAppearanceString
      * 
      * @return the font name to use for resource lookup
      */
-    COSName getFontName()
+    public COSName getFontName()
     {
         return fontName;
     }
