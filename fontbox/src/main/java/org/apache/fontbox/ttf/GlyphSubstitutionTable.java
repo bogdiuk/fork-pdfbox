@@ -27,6 +27,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Predicate;
+import java.util.regex.Pattern;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -75,6 +77,14 @@ public class GlyphSubstitutionTable extends TTFTable
 
     private GsubData gsubData;
 
+    /**
+     * The regex represents 4 'word characters' [a-zA-Z_0-9], see
+     * {@link java.util.regex.ASCII#WORD}.
+     * <p>
+     * Note: the ' '-character is not matched!
+     */
+    private static final Pattern WORDPATTERN = Pattern.compile( "\\w{4}" );
+
     GlyphSubstitutionTable()
     {
     }
@@ -99,7 +109,16 @@ public class GlyphSubstitutionTable extends TTFTable
 
         scriptList = readScriptList(data, start + scriptListOffset);
         featureListTable = readFeatureList(data, start + featureListOffset);
-        lookupListTable = readLookupList(data, start + lookupListOffset);
+        if (lookupListOffset > 0)
+        {
+            lookupListTable = readLookupList(data, start + lookupListOffset);
+        }
+        else
+        {
+            // happened with NotoSansNewTaiLue-Regular.ttf in noto-fonts-20201206-phase3.zip
+            LOG.warn("lookupListOffset is 0, LookupListTable is considered empty");
+            lookupListTable = new LookupListTable(0, new LookupTable[0]);
+        }
 
         GlyphSubstitutionDataExtractor glyphSubstitutionDataExtractor = new GlyphSubstitutionDataExtractor();
 
@@ -195,7 +214,8 @@ public class GlyphSubstitutionTable extends TTFTable
             {
                 // catch corrupt file
                 // https://docs.microsoft.com/en-us/typography/opentype/spec/chapter2#flTbl
-                if (featureTags[i].matches("\\w{4}") && featureTags[i-1].matches("\\w{4}"))
+                if (WORDPATTERN.matcher(featureTags[i]).matches() &&
+                    WORDPATTERN.matcher(featureTags[i - 1]).matches())
                 {
                     // ArialUni.ttf has many warnings but isn't corrupt, so we assume that only
                     // strings with trash characters indicate real corruption
@@ -240,6 +260,14 @@ public class GlyphSubstitutionTable extends TTFTable
         for (int i = 0; i < lookupCount; i++)
         {
             lookups[i] = data.readUnsignedShort();
+            if (lookups[i] == 0)
+            {
+                LOG.error("lookups[" + i + "] is 0 at offset " + (data.getCurrentPosition() - 2));
+            }
+            else if (offset + lookups[i] > data.getOriginalDataSize())
+            {
+                LOG.error((offset + lookups[i]) + " > " + data.getOriginalDataSize());
+            }
         }
         LookupTable[] lookupTables = new LookupTable[lookupCount];
         for (int i = 0; i < lookupCount; i++)
@@ -293,6 +321,14 @@ public class GlyphSubstitutionTable extends TTFTable
         for (int i = 0; i < subTableCount; i++)
         {
             subTableOffsets[i] = data.readUnsignedShort();
+            if (subTableOffsets[i] == 0)
+            {
+                LOG.error("subTableOffsets[" + i + "] is 0 at offset " + (data.getCurrentPosition() - 2));
+            }
+            else if (offset + subTableOffsets[i] > data.getOriginalDataSize())
+            {
+                LOG.error((offset + subTableOffsets[i]) + " > " + data.getOriginalDataSize());
+            }                
         }
 
         int markFilteringSet;
@@ -419,11 +455,8 @@ public class GlyphSubstitutionTable extends TTFTable
         {
             data.seek(offset + sequenceOffsets[i]);
             int glyphCount = data.readUnsignedShort();
-            for (int j = 0; j < glyphCount; ++j)
-            {
-                int[] substituteGlyphIDs = data.readUnsignedShortArray(glyphCount);
-                sequenceTables[i] = new SequenceTable(glyphCount, substituteGlyphIDs);
-            }
+            int[] substituteGlyphIDs = data.readUnsignedShortArray(glyphCount);
+            sequenceTables[i] = new SequenceTable(glyphCount, substituteGlyphIDs);
         }
 
         return new LookupTypeMultipleSubstitutionFormat1(substFormat, coverageTable, sequenceTables);
@@ -732,8 +765,8 @@ public class GlyphSubstitutionTable extends TTFTable
      * @param gid GID
      * @param scriptTags Script tags applicable to the gid (see {@link OpenTypeScript})
      * @param enabledFeatures list of features to apply
-     * 
-     * @return the id of the glyph substituion
+     *
+     * @return the id of the glyph substitution
      */
     public int getSubstitution(int gid, String[] scriptTags, List<String> enabledFeatures)
     {
@@ -745,7 +778,7 @@ public class GlyphSubstitutionTable extends TTFTable
         if (cached != null)
         {
             // Because script detection for indeterminate scripts (COMMON, INHERIT, etc.) depends on context,
-            // it is possible to return a different substitution for the same input. However we don't want that,
+            // it is possible to return a different substitution for the same input. However, we don't want that,
             // as we need a one-to-one mapping.
             return cached;
         }
@@ -763,13 +796,14 @@ public class GlyphSubstitutionTable extends TTFTable
     }
 
     /**
-     * For a substitute-gid (obtained from {@link #getSubstitution(int, String[], List)}), retrieve the original gid.
-     *
-     * Only gids previously substituted by this instance can be un-substituted. If you are trying to unsubstitute before
-     * you substitute, something is wrong.
+     * For a substitute-gid (obtained from {@link #getSubstitution(int, String[], List)}),
+     * retrieve the original gid.
+     * <p>
+     * Only gids previously substituted by this instance can be un-substituted.
+     * If you are trying to unsubstitute before you substitute, something is wrong.
      *
      * @param sgid Substitute GID
-     * 
+     *
      * @return the original gid of a substitute-gid
      */
     public int getUnsubstitution(int sgid)

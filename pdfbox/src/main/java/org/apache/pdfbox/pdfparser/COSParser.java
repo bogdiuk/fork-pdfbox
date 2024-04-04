@@ -55,6 +55,7 @@ import org.apache.pdfbox.pdmodel.encryption.ProtectionPolicy;
 import org.apache.pdfbox.pdmodel.encryption.PublicKeyDecryptionMaterial;
 import org.apache.pdfbox.pdmodel.encryption.SecurityHandler;
 import org.apache.pdfbox.pdmodel.encryption.StandardDecryptionMaterial;
+import org.apache.pdfbox.util.StringUtil;
 
 /**
  * COS-Parser which first reads startxref and xref tables in order to know valid objects and parse only these objects.
@@ -620,10 +621,12 @@ public class COSParser extends BaseParser implements ICOSParser
     public COSBase dereferenceCOSObject(COSObject obj) throws IOException
     {
         long currentPos = source.getPosition();
-        COSBase parsedObj = parseObjectDynamically(obj.getKey(), false);
+        COSObjectKey key = obj.getKey();
+        COSBase parsedObj = parseObjectDynamically(key, false);
         if (parsedObj != null)
         {
             parsedObj.setDirect(false);
+            parsedObj.setKey(key);
         }
         if (currentPos > 0)
         {
@@ -870,8 +873,7 @@ public class COSParser extends BaseParser implements ICOSParser
             }
             if (COSNull.NULL == length)
             {
-                LOG.warn("Length object (" + lengthObj.getObjectNumber() + " "
-                        + lengthObj.getGenerationNumber() + ") not found");
+                LOG.warn("Length object (" + lengthObj.getKey() + ") not found");
                 return null;
             }
             if (length instanceof COSNumber)
@@ -1719,7 +1721,7 @@ public class COSParser extends BaseParser implements ICOSParser
         while(true)
         {
             String currentLine = readLine();
-            String[] splitString = currentLine.split("\\s");
+            String[] splitString = StringUtil.splitOnSpace(currentLine);
             if (splitString.length != 2)
             {
                 LOG.warn("Unexpected XRefTable Entry: " + currentLine);
@@ -1762,7 +1764,7 @@ public class COSParser extends BaseParser implements ICOSParser
                 }
                 //Ignore table contents
                 currentLine = readLine();
-                splitString = currentLine.split("\\s");
+                splitString = StringUtil.splitOnSpace(currentLine);
                 if (splitString.length < 3)
                 {
                     LOG.warn("invalid xref line: " + currentLine);

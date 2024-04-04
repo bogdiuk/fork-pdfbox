@@ -19,6 +19,7 @@ package org.apache.pdfbox.filter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
@@ -199,6 +200,7 @@ public abstract class Filter
      * @param results list of optional decoding results for each filter
      * @return the decoded stream data
      * @throws IOException if the stream cannot be decoded
+     * @throws IllegalArgumentException if filterList is empty
      */
     public static RandomAccessRead decode(InputStream encoded, List<Filter> filterList,
             COSDictionary parameters, DecodeOptions options, List<DecodeResult> results)
@@ -206,12 +208,26 @@ public abstract class Filter
     {
         int length = parameters.getInt(COSName.LENGTH,
                 RandomAccessReadBuffer.DEFAULT_CHUNK_SIZE_4KB);
+        if (filterList.isEmpty())
+        {
+            throw new IllegalArgumentException("Empty filterList");
+        }
         if (filterList.size() > 1)
         {
             Set<Filter> filterSet = new HashSet<>(filterList);
             if (filterSet.size() != filterList.size())
             {
-                throw new IOException("Duplicate");
+                List<Filter> reducedFilterList = new ArrayList<>();
+                for (Filter filter : filterList)
+                {
+                    if (!reducedFilterList.contains(filter))
+                    {
+                        reducedFilterList.add(filter);
+                    }
+                }
+                // replace origin list with the reduced one
+                filterList = reducedFilterList;
+                LOG.warn("Removed duplicated filter entries");
             }
         }
         InputStream input = encoded;

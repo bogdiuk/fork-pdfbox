@@ -28,6 +28,7 @@ import java.util.Deque;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.zip.DataFormatException;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -931,17 +932,21 @@ public abstract class PDFStreamEngine
             exception instanceof MissingResourceException ||
             exception instanceof MissingImageReaderException)
         {
-            LOG.error(exception.getMessage());
+            LOG.error(exception.getMessage(), exception);
         }
         else if (exception instanceof EmptyGraphicsStackException)
         {
-            LOG.warn(exception.getMessage());
+            LOG.warn(exception.getMessage(), exception);
         }
         else if (operator.getName().equals("Do"))
         {
             // todo: this too forgiving, but PDFBox has always worked this way for DrawObject
             //       some careful refactoring is needed
-            LOG.warn(exception.getMessage());
+            LOG.warn(exception.getMessage(), exception);
+        }
+        else if (exception.getCause() instanceof DataFormatException)
+        {
+            LOG.warn(exception.getMessage(), exception);
         }
         else
         {
