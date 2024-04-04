@@ -41,8 +41,8 @@
     <module>fontbox</module>
     <module>xmpbox</module>
     <module>pdfbox</module>
-    <module>preflight</module>
-    <module>preflight-app</module>
+    <!--module>preflight</module-->
+    <!--module>preflight-app</module-->
     <module>debugger</module>
     <module>tools</module>
     <module>app</module>
