@@ -92,7 +92,7 @@ public abstract class PDVariableText extends PDTerminalField
      *
      * @return the DA element of the dictionary object
      */
-    PDDefaultAppearanceString getDefaultAppearanceString() throws IOException
+    public PDDefaultAppearanceString getDefaultAppearanceString() throws IOException
     {
         COSBase base = getInheritableAttribute(COSName.DA);
         COSString da = null;
