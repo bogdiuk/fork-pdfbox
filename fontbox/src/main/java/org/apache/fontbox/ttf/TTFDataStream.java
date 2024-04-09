@@ -238,6 +238,10 @@ abstract class TTFDataStream implements Closeable
      */
     public abstract void seek(long pos) throws IOException;
 
+    public void skip(int delta) throws IOException {
+        seek(getCurrentPosition() + delta);
+    }
+
     /**
      * Read a specific number of bytes from the stream.
      *

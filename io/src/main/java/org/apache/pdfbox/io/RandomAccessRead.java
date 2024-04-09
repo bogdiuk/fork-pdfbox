@@ -96,6 +96,18 @@ public interface RandomAccessRead extends Closeable
     }
 
     /**
+     * Finishes when {@code length} bytes are read, or EOF. Always returns {@code byte[length]}, never trims.
+     * @see InputStream#readNBytes(byte[], int, int)
+     * @return when {@code length} bytes are read, or EOF
+     */
+    default byte[] readUpTo(int length) throws IOException
+    {
+        byte[] result = new byte[length];
+        readUpTo(result, 0, result.length);
+        return result;
+    }
+
+    /**
      * Finishes when {@code length} bytes are read, or EOF. Just like {@link org.apache.pdfbox.io.IOUtils#populateBuffer(java.io.InputStream, byte[])}
      * @see InputStream#readNBytes(byte[], int, int)
      * @return amount of read bytes

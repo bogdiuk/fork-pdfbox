@@ -53,24 +53,22 @@ public class CFFTable extends TTFTable
         CFFParser parser = new CFFParser();
         LoadOnlyHeaders loadOnlyHeaders = ttf.getLoadOnlyHeaders();
         parser.setLoadOnlyHeaders(loadOnlyHeaders);
-        if (loadOnlyHeaders != null)
+        try (RandomAccessRead subReader = data.createSubView(getLength()))
         {
-            // TODO: measure performance and maybe use createSubView() for non-LoadOnlyHeaders case
-            try (RandomAccessRead subReader = data.createSubView(getLength()))
+            if (subReader != null)
             {
-                if (subReader != null)
-                {
-                    cffFont = parser.parse(subReader).get(0);
-                    data.seek(getOffset() + getLength());
-                    initialized = true;
-                    return;
-                }
-                assert loadOnlyHeaders != null
+                cffFont = parser.parse(subReader).get(0);
+                data.seek(getOffset() + getLength());
+            }
+            else
+            {
+                assert loadOnlyHeaders == null
                         : "It is inefficient to read whole CFF table to parse only headers, please use RandomAccessReadUncachedDataStream";
+                byte[] bytes = data.read((int)getLength());
+                cffFont = parser.parse(bytes, new CFFBytesource(ttf)).get(0);
             }
         }
-        byte[] bytes = data.read((int)getLength());
-        cffFont = parser.parse(bytes, new CFFBytesource(ttf)).get(0);
+        assert data.getCurrentPosition() == getOffset() + getLength();
 
         initialized = true;
     }

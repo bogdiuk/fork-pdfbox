@@ -47,14 +47,8 @@ class RandomAccessReadDataStream extends TTFDataStream
     RandomAccessReadDataStream(RandomAccessRead randomAccessRead) throws IOException
     {
         length = randomAccessRead.length();
-        data = new byte[(int) length];
-        int remainingBytes = data.length;
-        int amountRead;
-        while ((amountRead = randomAccessRead.read(data, data.length - remainingBytes,
-                remainingBytes)) > 0)
-        {
-            remainingBytes -= amountRead;
-        }
+        data = randomAccessRead.readUpTo((int) length);
+        IOUtils.closeQuietly(randomAccessRead);
     }
 
     /**

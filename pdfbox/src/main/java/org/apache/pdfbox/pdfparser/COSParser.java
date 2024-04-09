@@ -502,23 +502,9 @@ public class COSParser extends BaseParser implements ICOSParser
         try
         {
             final int trailByteCount = (fileLen < readTrailBytes) ? (int) fileLen : readTrailBytes;
-            buf = new byte[trailByteCount];
             skipBytes = fileLen - trailByteCount;
             source.seek(skipBytes);
-            int off = 0;
-            int readBytes;
-            while (off < trailByteCount)
-            {
-                readBytes = source.read(buf, off, trailByteCount - off);
-                // in order to not get stuck in a loop we check readBytes (this should never happen)
-                if (readBytes < 1)
-                {
-                    throw new IOException(
-                            "No more bytes to read for trailing buffer, but expected: "
-                                    + (trailByteCount - off));
-                }
-                off += readBytes;
-            }
+            buf = source.readExact(trailByteCount);
         }
         finally
         {

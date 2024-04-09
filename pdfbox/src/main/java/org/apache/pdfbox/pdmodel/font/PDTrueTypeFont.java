@@ -770,14 +770,7 @@ public class PDTrueTypeFont extends PDSimpleFont implements PDVectorFont
             throws IOException
     {
         long startPos = randomAccessRead.getPosition();
-        byte[] tagBytes = new byte[4];
-        int remainingBytes = tagBytes.length;
-        int amountRead;
-        while ((amountRead = randomAccessRead.read(tagBytes, tagBytes.length - remainingBytes,
-                remainingBytes)) > 0)
-        {
-            remainingBytes -= amountRead;
-        }
+        byte[] tagBytes = randomAccessRead.readUpTo(4);
         randomAccessRead.seek(startPos);
         if ("OTTO".equals(new String(tagBytes, StandardCharsets.US_ASCII)))
         {
