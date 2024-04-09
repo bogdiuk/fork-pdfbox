@@ -20,9 +20,9 @@ import java.io.IOException;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 
 /**
  * This 'name'-table is a required table in a TrueType font.
@@ -38,11 +38,10 @@ public class NamingTable extends TTFTable
 
     private List<NameRecord> nameRecords;
 
-    private Map<Integer, Map<Integer, Map<Integer, Map<Integer, String>>>> lookupTable;
-
     private String fontFamily = null;
     private String fontSubFamily = null;
     private String psName = null;
+    private byte[] stringTable;
 
     NamingTable()
     {
@@ -86,24 +85,29 @@ public class NamingTable extends TTFTable
                 nameRecords.add(nr);
             }
         }
-
-        for (NameRecord nr : nameRecords)
+        final long stringsStart = data.getCurrentPosition(); // == getOffset() + (2L*3)+numberOfNameRecords*2L*6
+        stringTable = onlyHeaders
+                ? null
+                : data.read((int) (getOffset() + getLength() - stringsStart));
+        if (onlyHeaders)
         {
-            // don't try to read invalid offsets, see PDFBOX-2608
-            if (nr.getStringOffset() > getLength())
+            // preload strings - profiler shows that it is faster than using 'stringTable' or 'data.readString' on demand
+            for (NameRecord nr : nameRecords)
             {
-                nr.setString(null);
-                continue;
+                // don't try to read invalid offsets, see PDFBOX-2608
+                if (nr.getStringOffset() > getLength())
+                {
+                    nr.setString(null);
+                    continue;
+                }
+                data.seek(stringsStart + nr.getStringOffset());
+                String string = data.readString(nr.getStringLength(), getCharset(nr));
+                nr.setString(string);
             }
-
-            data.seek(getOffset() + (2L*3)+numberOfNameRecords*2L*6+nr.getStringOffset());
-            Charset charset = getCharset(nr);
-            String string = data.readString(nr.getStringLength(), charset);
-            nr.setString(string);
         }
 
-        lookupTable = new HashMap<>(nameRecords.size());
-        fillLookupTable();
+        // sort to be able to binarySearch()
+        Collections.sort(nameRecords, NamingTable::compareWithoutString);
         readInterestingStrings();
     }
 
@@ -136,22 +140,6 @@ public class NamingTable extends TTFTable
             }
         }
         return charset;
-    }
-
-    private void fillLookupTable()
-    {
-        // build multi-dimensional lookup table
-        for (NameRecord nr : nameRecords)
-        {
-            // name id
-            Map<Integer, Map<Integer, Map<Integer, String>>> platformLookup = lookupTable.computeIfAbsent(nr.getNameId(), k -> new HashMap<>());
-            // platform id
-            Map<Integer, Map<Integer, String>> encodingLookup = platformLookup.computeIfAbsent(nr.getPlatformId(), k -> new HashMap<>());
-            // encoding id
-            Map<Integer, String> languageLookup = encodingLookup.computeIfAbsent(nr.getPlatformEncodingId(), k -> new HashMap<>(1));
-            // language id / string
-            languageLookup.put(nr.getLanguageId(), nr.getString());
-        }
     }
 
     private void readInterestingStrings()
@@ -191,6 +179,24 @@ public class NamingTable extends TTFTable
                     || languageId == NameRecord.LANGUAGE_WINDOWS_EN_US;
         }
         return false;
+    }
+
+    private static int compareWithoutString(NameRecord left, NameRecord right)
+    {
+        int result = Integer.compare(left.getNameId(), right.getNameId());
+        if (result == 0)
+        {
+            result = Integer.compare(left.getPlatformId(), right.getPlatformId());
+        }
+        if (result == 0)
+        {
+            result = Integer.compare(left.getPlatformEncodingId(), right.getPlatformEncodingId());
+        }
+        if (result == 0)
+        {
+            result = Integer.compare(left.getLanguageId(), right.getLanguageId());
+        }
+        return result;
     }
 
     /**
@@ -241,22 +247,39 @@ public class NamingTable extends TTFTable
      */
     public String getName(int nameId, int platformId, int encodingId, int languageId)
     {
-        Map<Integer, Map<Integer, Map<Integer, String>>> platforms = lookupTable.get(nameId);
-        if (platforms == null)
+        final NameRecord match = new NameRecord();
+        match.setNameId(nameId);
+        match.setPlatformId(platformId);
+        match.setPlatformEncodingId(encodingId);
+        match.setLanguageId(languageId);
+        final int found = Collections.binarySearch(nameRecords, match, NamingTable::compareWithoutString);
+        return found < 0 ? null : getString(nameRecords.get(found));
+    }
+
+    public byte[] getStringBytes(NameRecord nr)
+    {
+        final int start = nr.getStringOffset();
+        final int end = start + nr.getStringLength();
+        return start < stringTable.length
+                ? Arrays.copyOfRange(stringTable, start, Math.min(end, stringTable.length))
+                // don't try to read invalid offsets, see PDFBOX-2608
+                : null;
+    }
+
+    public String getString(NameRecord nr)
+    {
+        // don't try to read invalid offsets, see PDFBOX-2608
+        if (nr == null || nr.getStringOffset() >= getLength())
         {
             return null;
         }
-        Map<Integer, Map<Integer, String>> encodings = platforms.get(platformId);
-        if (encodings == null)
+        String preloaded = nr.getStringLazy();
+        if (preloaded == null)
         {
-            return null;
+            preloaded = new String(stringTable, nr.getStringOffset(), nr.getStringLength(), getCharset(nr));
+            nr.setString(preloaded);
         }
-        Map<Integer, String> languages = encodings.get(encodingId);
-        if (languages == null)
-        {
-            return null;
-        }
-        return languages.get(languageId);
+        return preloaded;
     }
 
     /**

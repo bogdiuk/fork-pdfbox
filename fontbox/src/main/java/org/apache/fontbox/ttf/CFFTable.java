@@ -50,10 +50,20 @@ public class CFFTable extends TTFTable
     @Override
     void read(TrueTypeFont ttf, TTFDataStream data) throws IOException
     {
-        byte[] bytes = data.read((int)getLength());
-
-        CFFParser parser = new CFFParser();
-        cffFont = parser.parse(bytes, new CFFBytesource(ttf)).get(0);
+        try (RandomAccessRead subReader = data.createSubView(getLength()))
+        {
+            CFFParser parser = new CFFParser();
+            // TODO: test if 'subReader' is better than 'byte[]'
+            if (subReader != null)
+            {
+                cffFont = parser.parse(subReader).get(0);
+            }
+            else
+            {
+                byte[] bytes = data.read((int)getLength());
+                cffFont = parser.parse(bytes, new CFFBytesource(ttf)).get(0);
+            }
+        }
 
         initialized = true;
     }
