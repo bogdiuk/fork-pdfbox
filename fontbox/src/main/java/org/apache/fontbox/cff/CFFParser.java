@@ -48,7 +48,7 @@ public class CFFParser
     private static final String TAG_TTFONLY = "\u0000\u0001\u0000\u0000";
 
     private String[] stringIndex = null;
-    private ByteSource source;
+//    private ByteSource source;
     
     // for debugging only
     private String debugFontName;
@@ -78,7 +78,7 @@ public class CFFParser
     public List<CFFFont> parse(byte[] bytes, ByteSource source) throws IOException
     {
         // TODO do we need to store the source data of the font? It isn't used at all
-        this.source = source;
+//        this.source = source;
         return parse(new DataInputByteArray(bytes));
     }
     
@@ -92,17 +92,17 @@ public class CFFParser
     public List<CFFFont> parse(RandomAccessRead randomAccessRead) throws IOException
     {
         // TODO do we need to store the source data of the font? It isn't used at all
-        byte[] bytes = new byte[(int) randomAccessRead.length()];
+        // byte[] bytes = new byte[(int) randomAccessRead.length()];
         randomAccessRead.seek(0);
-        int remainingBytes = bytes.length;
-        int amountRead;
-        while ((amountRead = randomAccessRead.read(bytes, bytes.length - remainingBytes,
-                remainingBytes)) > 0)
-        {
-            remainingBytes -= amountRead;
-        }
-        randomAccessRead.seek(0);
-        this.source = new CFFBytesource(bytes);
+        // int remainingBytes = bytes.length;
+        // int amountRead;
+        // while ((amountRead = randomAccessRead.read(bytes, bytes.length - remainingBytes,
+        //         remainingBytes)) > 0)
+        // {
+        //     remainingBytes -= amountRead;
+        // }
+        // randomAccessRead.seek(0);
+        // this.source = new CFFBytesource(bytes);
         return parse(new DataInputRandomAccessRead(randomAccessRead));
     }
 
@@ -213,7 +213,7 @@ public class CFFParser
         {
             CFFFont font = parseFont(input, nameIndex[i], topDictIndex[i]);
             font.setGlobalSubrIndex(globalSubrIndex);
-            font.setData(source);
+//            font.setData(source);
             fonts.add(font);
         }
         return fonts;
