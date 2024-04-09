@@ -48,7 +48,7 @@ public class CFFParser
     private static final String TAG_TTFONLY = "\u0000\u0001\u0000\u0000";
 
     private String[] stringIndex = null;
-    private ByteSource source;
+//    private ByteSource source;
     private FontHeaders loadOnlyHeaders;
 
     // for debugging only
@@ -84,7 +84,7 @@ public class CFFParser
     public List<CFFFont> parse(byte[] bytes, ByteSource source) throws IOException
     {
         // TODO do we need to store the source data of the font? It isn't used at all
-        this.source = source;
+//        this.source = source;
         return parse(new DataInputByteArray(bytes));
     }
     
@@ -100,19 +100,19 @@ public class CFFParser
         // TODO do we need to store the source data of the font? It isn't used at all
         // definitely don't need 'source' in 'loadOnlyHeaders' mode
         randomAccessRead.seek(0);
-        if (loadOnlyHeaders == null)
-        {
-            byte[] bytes = new byte[(int) randomAccessRead.length()];
-            int remainingBytes = bytes.length;
-            int amountRead;
-            while ((amountRead = randomAccessRead.read(bytes, bytes.length - remainingBytes,
-                    remainingBytes)) > 0)
-            {
-                remainingBytes -= amountRead;
-            }
-            randomAccessRead.seek(0);
-            this.source = new CFFBytesource(bytes);
-        }
+//        if (loadOnlyHeaders == null)
+//        {
+//            byte[] bytes = new byte[(int) randomAccessRead.length()];
+//            int remainingBytes = bytes.length;
+//            int amountRead;
+//            while ((amountRead = randomAccessRead.read(bytes, bytes.length - remainingBytes,
+//                    remainingBytes)) > 0)
+//            {
+//                remainingBytes -= amountRead;
+//            }
+//            randomAccessRead.seek(0);
+//            this.source = new CFFBytesource(bytes);
+//        }
         return parse(new DataInputRandomAccessRead(randomAccessRead));
     }
 
@@ -162,7 +162,7 @@ public class CFFParser
         {
             CFFFont font = parseFont(input, nameIndex[i], topDictIndex[i]);
             font.setGlobalSubrIndex(globalSubrIndex);
-            font.setData(source);
+//            font.setData(source);
             fonts.add(font);
         }
         return fonts;

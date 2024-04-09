@@ -35,7 +35,7 @@ public abstract class CFFFont implements FontBoxFont
 {
     private String fontName;
     private CFFCharset charset;
-    private CFFParser.ByteSource source;
+//    private CFFParser.ByteSource source;
     protected final Map<String, Object> topDict = new LinkedHashMap<>();
     protected byte[][] charStrings;
     protected byte[][] globalSubrIndex;
@@ -140,25 +140,25 @@ public abstract class CFFFont implements FontBoxFont
         return Arrays.asList(charStrings);
     }
 
-    /**
-     * Sets a byte source to re-read the CFF data in the future.
-     */
-    final void setData(CFFParser.ByteSource source)
-    {
-        this.source = source;
-    }
-    
-    /**
-     * Returns the CFF data.
-     * 
-     * @return the cff data as byte array
-     * 
-     * @throws IOException if the data could not be read
-     */
-    public byte[] getData() throws IOException
-    {
-        return source.getBytes();
-    }
+//    /**
+//     * Sets a byte source to re-read the CFF data in the future.
+//     */
+//    final void setData(CFFParser.ByteSource source)
+//    {
+//        this.source = source;
+//    }
+//    
+//    /**
+//     * Returns the CFF data.
+//     * 
+//     * @return the cff data as byte array
+//     * 
+//     * @throws IOException if the data could not be read
+//     */
+//    public byte[] getData() throws IOException
+//    {
+//        return source.getBytes();
+//    }
     
     /**
      * Returns the number of charstrings in the font.

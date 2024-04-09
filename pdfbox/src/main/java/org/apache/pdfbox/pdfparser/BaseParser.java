@@ -450,7 +450,7 @@ public abstract class BaseParser
         {
             source.rewind(amountRead);
         }
-        if (amountRead < 3)
+        if (amountRead < 2)
         {
             return bracesParameter;
         }
@@ -465,6 +465,7 @@ public abstract class BaseParser
                 && (nextThreeBytes[1] == '/' || nextThreeBytes[1] == '>')) //
                 || //
                 (nextThreeBytes[0] == ASCII_CR && nextThreeBytes[1] == ASCII_LF
+                        && amountRead >= 3
                         && (nextThreeBytes[2] == '/' || nextThreeBytes[2] == '>')) //
         )
         {
