@@ -24,6 +24,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.Calendar;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -335,12 +336,15 @@ public final class TTFSubsetter
                         charset = StandardCharsets.UTF_16BE;
                     }
                 }
-                String value = nameRecord.getString();
-                if (nameRecord.getNameId() == 6 && prefix != null)
+                byte[] value = name.getStringBytes(nameRecord);
+                if (nameRecord.getNameId() == 6 && prefix != null && value != null)
                 {
-                    value = prefix + value;
+                    byte[] prefixBytes = prefix.getBytes(charset);
+                    byte[] result = Arrays.copyOf(prefixBytes, prefixBytes.length + value.length);
+                    System.arraycopy(value, 0, result, prefixBytes.length, value.length);
+                    value = result;
                 }
-                names[j] = value.getBytes(charset);
+                names[j] = value;
                 j++;
             }
         }
