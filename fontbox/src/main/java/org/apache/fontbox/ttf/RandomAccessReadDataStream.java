@@ -19,9 +19,12 @@ package org.apache.fontbox.ttf;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 import org.apache.pdfbox.io.IOUtils;
 import org.apache.pdfbox.io.RandomAccessRead;
+import org.apache.pdfbox.io.RandomAccessReadBuffer;
 
 /**
  * An implementation of the TTFDataStream using RandomAccessRead as source.
@@ -37,21 +40,15 @@ class RandomAccessReadDataStream extends TTFDataStream
     /**
      * Constructor.
      *
-     * @param randomAccessRead source to be read from
+     * @param randomAccessRead source to be read from, is read to {@code byte[]} and automatically closed
      *
      * @throws IOException If there is a problem reading the source data.
      */
     RandomAccessReadDataStream(RandomAccessRead randomAccessRead) throws IOException
     {
         length = randomAccessRead.length();
-        data = new byte[(int) length];
-        int remainingBytes = data.length;
-        int amountRead;
-        while ((amountRead = randomAccessRead.read(data, data.length - remainingBytes,
-                remainingBytes)) > 0)
-        {
-            remainingBytes -= amountRead;
-        }
+        data = randomAccessRead.readNBytes((int) length);
+        IOUtils.closeQuietly(randomAccessRead);
     }
 
     /**
@@ -190,5 +187,16 @@ class RandomAccessReadDataStream extends TTFDataStream
     public long getOriginalDataSize()
     {
         return length;
+    }
+
+    @Override
+    public RandomAccessRead getSubReader(long length)
+    {
+        try {
+            return new RandomAccessReadBuffer(data).createView(currentPosition, length);
+        } catch (IOException ex) {
+            Logger.getLogger(RandomAccessReadDataStream.class.getName()).log(Level.SEVERE, null, ex);
+            return null;
+        }
     }
 }

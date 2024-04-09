@@ -24,6 +24,7 @@ import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.Calendar;
 import java.util.TimeZone;
+import org.apache.pdfbox.io.RandomAccessRead;
 
 /**
  * An abstract class to read a data stream.
@@ -237,6 +238,10 @@ abstract class TTFDataStream implements Closeable
      */
     public abstract void seek(long pos) throws IOException;
 
+    public void skip(int delta) throws IOException {
+        seek(getCurrentPosition() + delta);
+    }
+
     /**
      * Read a specific number of bytes from the stream.
      *
@@ -300,4 +305,12 @@ abstract class TTFDataStream implements Closeable
      * @return The size of the original data.
      */
     public abstract long getOriginalDataSize();
+
+    /**
+     * {@code SubReader.close()} should never close {@code this} stream, only itself.
+     * Optional, caller can read {@code byte[]} instead.
+     *
+     * @return null if not supported. Please close() the result
+     */
+    public abstract /*@Nullable*/ RandomAccessRead getSubReader(long length);
 }

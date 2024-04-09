@@ -18,6 +18,7 @@ package org.apache.pdfbox.io;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.io.InputStream;
 
 /**
  * An interface allowing random access read operations.
@@ -55,7 +56,85 @@ public interface RandomAccessRead extends Closeable
      * @throws IOException If there was an error while reading the data.
      */
     int read(byte[] b, int offset, int length) throws IOException;
-    
+
+    /**
+     * @throws IOException if less than {@code length} bytes are available
+     */
+    default byte[] readExact(byte[] b, int offset, int length) throws IOException
+    {
+        if (length() - getPosition() < length)
+        {
+            throw new IOException("End-of-data");
+        }
+        int read = readNBytes(b, offset, length);
+        if (read < length)
+        {
+            rewind(read);
+            throw new IOException("End-of-data");
+        }
+        return b;
+    }
+
+    /**
+     * @throws IOException if less than {@code length} bytes are available
+     */
+    default byte[] readExact(int length) throws IOException
+    {
+        return readExact(new byte[length], 0, length);
+    }
+
+    /**
+     * Finishes when {@code length} bytes are read, or EOF. Always returns {@code result}, never trims.
+     * @see InputStream#readNBytes(byte[], int, int)
+     * @return when {@code result.length} bytes are read, or EOF
+     */
+    default int readNBytes(byte[] result) throws IOException
+    {
+        return readNBytes(result, 0, result.length);
+    }
+
+    /**
+     * Finishes when {@code length} bytes are read, or EOF. Always returns {@code byte[length]}, never trims.
+     * @see InputStream#readNBytes(byte[], int, int)
+     * @return when {@code length} bytes are read, or EOF
+     */
+    default byte[] readNBytes(int length) throws IOException
+    {
+        byte[] result = new byte[length];
+        readNBytes(result, 0, result.length);
+        return result;
+    }
+
+    /**
+     * Finishes when {@code length} bytes are read, or EOF.
+     * @see InputStream#readNBytes(byte[], int, int)
+     * @return amount of read bytes
+     */
+    default int readNBytes(byte[] result, int offset, int length) throws IOException
+    {
+        if (Integer.MAX_VALUE - length < offset)
+        {
+            throw new IOException("Integer overflow");
+        }
+        int cursor = offset;
+        int end = offset + length;
+        while (cursor < end)
+        {
+            int read = read(result, cursor, end - cursor);
+            if (read < 0)
+            {
+                break;
+            }
+            else if (read == 0)
+            {
+                // in order to not get stuck in a loop we check readBytes (this should never happen)
+                throw new IOException("Read 0 bytes, risk of an infinite loop");
+            }
+            cursor += read;
+        }
+        return cursor - offset;
+    }
+
     /**
      * Returns offset of next byte to be returned by a read method.
      * 

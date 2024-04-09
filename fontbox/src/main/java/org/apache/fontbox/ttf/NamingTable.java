@@ -20,9 +20,9 @@ import java.io.IOException;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 
 /**
  * This 'name'-table is a required table in a TrueType font.
@@ -38,11 +38,10 @@ public class NamingTable extends TTFTable
 
     private List<NameRecord> nameRecords;
 
-    private Map<Integer, Map<Integer, Map<Integer, Map<Integer, String>>>> lookupTable;
-
     private String fontFamily = null;
     private String fontSubFamily = null;
     private String psName = null;
+    private byte[] stringTable;
 
     NamingTable()
     {
@@ -63,70 +62,79 @@ public class NamingTable extends TTFTable
         int numberOfNameRecords = data.readUnsignedShort();
         int offsetToStartOfStringStorage = data.readUnsignedShort();
         nameRecords = new ArrayList<>(numberOfNameRecords);
+        LoadOnlyHeaders onlyHeaders = ttf.getLoadOnlyHeaders();
         for (int i=0; i< numberOfNameRecords; i++)
         {
             NameRecord nr = new NameRecord();
             nr.initData(ttf, data);
-            nameRecords.add(nr);
+            if (onlyHeaders == null || isUsefulForOnlyHeaders(nr))
+            {
+                nameRecords.add(nr);
+            }
         }
-
-        for (NameRecord nr : nameRecords)
+        final long stringsStart = data.getCurrentPosition(); // == getOffset() + (2L*3)+numberOfNameRecords*2L*6
+        stringTable = onlyHeaders == null
+                ? data.read((int) (getOffset() + getLength() - stringsStart))
+                : null;
+        if (onlyHeaders != null)
         {
-            // don't try to read invalid offsets, see PDFBOX-2608
-            if (nr.getStringOffset() > getLength())
+            // preload strings - profiler shows that it is faster than using 'stringTable' or 'data.readString' on demand
+            for (NameRecord nr : nameRecords)
             {
-                nr.setString(null);
-                continue;
-            }
-
-            data.seek(getOffset() + (2L*3)+numberOfNameRecords*2L*6+nr.getStringOffset());
-            int platform = nr.getPlatformId();
-            int encoding = nr.getPlatformEncodingId();
-            Charset charset = StandardCharsets.ISO_8859_1;
-            if (platform == NameRecord.PLATFORM_WINDOWS && (encoding == NameRecord.ENCODING_WINDOWS_SYMBOL || encoding == NameRecord.ENCODING_WINDOWS_UNICODE_BMP))
-            {
-                charset = StandardCharsets.UTF_16;
-            }
-            else if (platform == NameRecord.PLATFORM_UNICODE)
-            {
-                charset = StandardCharsets.UTF_16;
-            }
-            else if (platform == NameRecord.PLATFORM_ISO)
-            {
-                switch (encoding)
+                // don't try to read invalid offsets, see PDFBOX-2608
+                if (nr.getStringOffset() > getLength())
                 {
-                    case 0:
-                        charset = StandardCharsets.US_ASCII;
-                        break;
-                    case 1:
-                        //not sure is this is correct??
-                        charset = StandardCharsets.UTF_16BE;
-                        break;
-                    case 2:
-                        charset = StandardCharsets.ISO_8859_1;
-                        break;
-                    default:
-                        break;
+                    nr.setString(null);
+                    continue;
                 }
+
+                data.seek(stringsStart + nr.getStringOffset());
+                String string = data.readString(nr.getStringLength(), getCharset(nr));
+                nr.setString(string);
             }
-            String string = data.readString(nr.getStringLength(), charset);
-            nr.setString(string);
         }
 
-        // build multi-dimensional lookup table
-        lookupTable = new HashMap<>(nameRecords.size());
-        for (NameRecord nr : nameRecords)
+        // sort to be able to binarySearch()
+        Collections.sort(nameRecords, NamingTable::compareWithoutString);
+
+        readInterestingStrings(onlyHeaders);
+        initialized = true;
+    }
+
+    private Charset getCharset(NameRecord nr) {
+        int platform = nr.getPlatformId();
+        int encoding = nr.getPlatformEncodingId();
+        Charset charset = StandardCharsets.ISO_8859_1;
+        if (platform == NameRecord.PLATFORM_WINDOWS && (encoding == NameRecord.ENCODING_WINDOWS_SYMBOL || encoding == NameRecord.ENCODING_WINDOWS_UNICODE_BMP))
         {
-            // name id
-            Map<Integer, Map<Integer, Map<Integer, String>>> platformLookup = lookupTable.computeIfAbsent(nr.getNameId(), k -> new HashMap<>());
-            // platform id
-            Map<Integer, Map<Integer, String>> encodingLookup = platformLookup.computeIfAbsent(nr.getPlatformId(), k -> new HashMap<>());
-            // encoding id
-            Map<Integer, String> languageLookup = encodingLookup.computeIfAbsent(nr.getPlatformEncodingId(), k -> new HashMap<>(1));
-            // language id / string
-            languageLookup.put(nr.getLanguageId(), nr.getString());
+            charset = StandardCharsets.UTF_16;
         }
+        else if (platform == NameRecord.PLATFORM_UNICODE)
+        {
+            charset = StandardCharsets.UTF_16;
+        }
+        else if (platform == NameRecord.PLATFORM_ISO)
+        {
+            switch (encoding)
+            {
+                case 0:
+                    charset = StandardCharsets.US_ASCII;
+                    break;
+                case 1:
+                    //not sure is this is correct??
+                    charset = StandardCharsets.UTF_16BE;
+                    break;
+                case 2:
+                    charset = StandardCharsets.ISO_8859_1;
+                    break;
+                default:
+                    break;
+            }
+        }
+        return charset;
+    }
 
+    private void readInterestingStrings(LoadOnlyHeaders onlyHeaders) {
         // extract strings of interest
         fontFamily = getEnglishName(NameRecord.NAME_FONT_FAMILY_NAME);
         fontSubFamily = getEnglishName(NameRecord.NAME_FONT_SUB_FAMILY_NAME);
@@ -148,7 +156,43 @@ public class NamingTable extends TTFTable
             psName = psName.trim();
         }
 
-        initialized = true;
+        if (onlyHeaders != null) {
+            onlyHeaders.setName(psName);
+            onlyHeaders.setFontFamily(fontFamily, fontSubFamily);
+        }
+    }
+
+    private static boolean isUsefulForOnlyHeaders(NameRecord nr)
+    {
+        int nameId = nr.getNameId();
+        // see "psName =" and "getEnglishName()"
+        if (nameId == NameRecord.NAME_POSTSCRIPT_NAME
+                || nameId == NameRecord.NAME_FONT_FAMILY_NAME
+                || nameId == NameRecord.NAME_FONT_SUB_FAMILY_NAME)
+        {
+            int languageId = nr.getLanguageId();
+            return languageId == NameRecord.LANGUAGE_UNICODE
+                    || languageId == NameRecord.LANGUAGE_WINDOWS_EN_US;
+        }
+        return false;
+    }
+
+    private static int compareWithoutString(NameRecord left, NameRecord right)
+    {
+        int result = Integer.compare(left.getNameId(), right.getNameId());
+        if (result == 0)
+        {
+            result = Integer.compare(left.getPlatformId(), right.getPlatformId());
+        }
+        if (result == 0)
+        {
+            result = Integer.compare(left.getPlatformEncodingId(), right.getPlatformEncodingId());
+        }
+        if (result == 0)
+        {
+            result = Integer.compare(left.getLanguageId(), right.getLanguageId());
+        }
+        return result;
     }
 
     /**
@@ -199,22 +243,39 @@ public class NamingTable extends TTFTable
      */
     public String getName(int nameId, int platformId, int encodingId, int languageId)
     {
-        Map<Integer, Map<Integer, Map<Integer, String>>> platforms = lookupTable.get(nameId);
-        if (platforms == null)
+        final NameRecord match = new NameRecord();
+        match.setNameId(nameId);
+        match.setPlatformId(platformId);
+        match.setPlatformEncodingId(encodingId);
+        match.setLanguageId(languageId);
+        final int found = Collections.binarySearch(nameRecords, match, NamingTable::compareWithoutString);
+        return found < 0 ? null : getString(nameRecords.get(found));
+    }
+
+    public byte[] getStringBytes(NameRecord nr)
+    {
+        final int start = nr.getStringOffset();
+        final int end = start + nr.getStringLength();
+        return start < stringTable.length
+                ? Arrays.copyOfRange(stringTable, start, Math.min(end, stringTable.length))
+                // don't try to read invalid offsets, see PDFBOX-2608
+                : null;
+    }
+
+    public String getString(NameRecord nr)
+    {
+        // don't try to read invalid offsets, see PDFBOX-2608
+        if (nr == null || nr.getStringOffset() >= getLength())
         {
             return null;
         }
-        Map<Integer, Map<Integer, String>> encodings = platforms.get(platformId);
-        if (encodings == null)
+        String preloaded = nr.getStringLazy();
+        if (preloaded == null)
         {
-            return null;
+            preloaded = new String(stringTable, nr.getStringOffset(), nr.getStringLength(), getCharset(nr));
+            nr.setString(preloaded);
         }
-        Map<Integer, String> languages = encodings.get(encodingId);
-        if (languages == null)
-        {
-            return null;
-        }
-        return languages.get(languageId);
+        return preloaded;
     }
 
     /**

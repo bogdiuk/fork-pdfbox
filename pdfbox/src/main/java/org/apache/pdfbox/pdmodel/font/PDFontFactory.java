@@ -341,15 +341,7 @@ public final class PDFontFactory
         {
             try (RandomAccessRead fontView = fontFile.createView())
             {
-                int headerLength = 4;
-                header = new byte[headerLength];
-                int remainingBytes = headerLength;
-                int amountRead;
-                while ((amountRead = fontView.read(header, headerLength - remainingBytes,
-                        remainingBytes)) > 0)
-                {
-                    remainingBytes -= amountRead;
-                }
+                header = fontView.readNBytes(4);
             }
             catch (IOException ex)
             {

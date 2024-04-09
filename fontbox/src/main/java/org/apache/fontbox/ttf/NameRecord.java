@@ -180,6 +180,7 @@ public class NameRecord
      * 
      * @return A string for this class.
      */
+    @Override
     public String toString()
     {
         return 
@@ -190,9 +191,10 @@ public class NameRecord
             " " + string;
     }
     /**
-     * @return Returns the string.
+     * Use {@link NamingTable#getString(NameRecord)}
+     * @return Returns the string, if it was pre-loaded.
      */
-    public String getString()
+    String getStringLazy()
     {
         return string;
     }

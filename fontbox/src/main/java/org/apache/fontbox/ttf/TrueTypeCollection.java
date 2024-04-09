@@ -21,6 +21,7 @@ import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import org.apache.pdfbox.io.IOUtils;
 
 import org.apache.pdfbox.io.RandomAccessRead;
 import org.apache.pdfbox.io.RandomAccessReadBuffer;
@@ -46,7 +47,18 @@ public class TrueTypeCollection implements Closeable
      */
     public TrueTypeCollection(File file) throws IOException
     {
-        this(new RandomAccessReadBufferedFile(file));
+        this(new RandomAccessReadBufferedFile(file), false);
+    }
+
+    /**
+     * Creates a new TrueTypeCollection from a .ttc file.
+     *
+     * @param file The TTC file.
+     * @throws IOException If the font could not be parsed.
+     */
+    public TrueTypeCollection(File file, boolean dontReadToByteArray) throws IOException
+    {
+        this(new RandomAccessReadBufferedFile(file), dontReadToByteArray);
     }
 
     /**
@@ -57,7 +69,7 @@ public class TrueTypeCollection implements Closeable
      */
     public TrueTypeCollection(InputStream stream) throws IOException
     {
-        this(new RandomAccessReadBuffer(stream));
+        this(new RandomAccessReadBuffer(stream), false);
     }
 
     /**
@@ -66,9 +78,11 @@ public class TrueTypeCollection implements Closeable
      * @param randomAccessRead 
      * @throws IOException If the font could not be parsed.
      */
-    TrueTypeCollection(RandomAccessRead randomAccessRead) throws IOException
+    TrueTypeCollection(RandomAccessRead randomAccessRead, boolean dontReadToByteArray) throws IOException
     {
-        this.stream = new RandomAccessReadDataStream(randomAccessRead);
+        this.stream = dontReadToByteArray
+                ? new RandomAccessReadUncachedDataStream(randomAccessRead)
+                : new RandomAccessReadDataStream(randomAccessRead);
 
         // TTC header
         String tag = stream.readTag();
@@ -106,12 +120,31 @@ public class TrueTypeCollection implements Closeable
     {
         for (int i = 0; i < numFonts; i++)
         {
-            TrueTypeFont font = getFontAtIndex(i);
+            TrueTypeFont font = getFontAtIndex(i, null);
             trueTypeFontProcessor.process(font);
         }
     }
     
-    private TrueTypeFont getFontAtIndex(int idx) throws IOException
+    /**
+     * Run the callback for each TT font in the collection.
+     * 
+     * @param trueTypeFontProcessor the object with the callback method.
+     * @throws IOException if something went wrong when calling the TrueTypeFontProcessor
+     */
+    public void processAllFontHeaders(TrueTypeFontHeadersProcessor trueTypeFontProcessor) throws IOException
+    {
+        assert stream instanceof RandomAccessReadUncachedDataStream
+                : "For efficiency, we do not read whole file to byte[]";
+        for (int i = 0; i < numFonts; i++)
+        {
+            LoadOnlyHeaders headers = new LoadOnlyHeaders();
+            TrueTypeFont ttf = getFontAtIndex(i, headers);
+            IOUtils.closeQuietly(ttf); // all data is already saved in 'headers'
+            trueTypeFontProcessor.process(headers);
+        }
+    }
+    
+    private TrueTypeFont getFontAtIndex(int idx, LoadOnlyHeaders onlyHeaders) throws IOException
     {
         stream.seek(fontOffsets[idx]);
         TTFParser parser;
@@ -123,6 +156,7 @@ public class TrueTypeCollection implements Closeable
         {
             parser = new TTFParser(false);
         }
+        parser.setLoadOnlyHeaders(onlyHeaders);
         stream.seek(fontOffsets[idx]);
         return parser.parse(new TTCDataStream(stream));
     }
@@ -138,7 +172,7 @@ public class TrueTypeCollection implements Closeable
     {
         for (int i = 0; i < numFonts; i++)
         {
-            TrueTypeFont font = getFontAtIndex(i);
+            TrueTypeFont font = getFontAtIndex(i, null);
             if (font.getName().equals(name))
             {
                 return font;
@@ -154,6 +188,15 @@ public class TrueTypeCollection implements Closeable
     public interface TrueTypeFontProcessor
     {
         void process(TrueTypeFont ttf) throws IOException;
+    }
+    
+    /**
+     * Implement the callback method to call {@link TrueTypeCollection#processAllFontHeaders(LoadOnlyHeaders)}.
+     */
+    @FunctionalInterface
+    public interface TrueTypeFontHeadersProcessor
+    {
+        void process(LoadOnlyHeaders ttf) throws IOException;
     }
     
     @Override
