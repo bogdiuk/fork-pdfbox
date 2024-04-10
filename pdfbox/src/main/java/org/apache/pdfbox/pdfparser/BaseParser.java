@@ -445,12 +445,12 @@ public abstract class BaseParser
         }
         // Check the next 3 bytes if available
         byte[] nextThreeBytes = new byte[3];
-        int amountRead = source.read(nextThreeBytes);
+        int amountRead = source.readNBytes(nextThreeBytes);
         if (amountRead > 0)
         {
             source.rewind(amountRead);
         }
-        if (amountRead < 3)
+        if (amountRead < 2)
         {
             return bracesParameter;
         }
@@ -465,6 +465,7 @@ public abstract class BaseParser
                 && (nextThreeBytes[1] == '/' || nextThreeBytes[1] == '>')) //
                 || //
                 (nextThreeBytes[0] == ASCII_CR && nextThreeBytes[1] == ASCII_LF
+                        && amountRead >= 3
                         && (nextThreeBytes[2] == '/' || nextThreeBytes[2] == '>')) //
         )
         {

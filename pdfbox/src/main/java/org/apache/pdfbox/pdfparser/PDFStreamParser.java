@@ -321,7 +321,7 @@ public class PDFStreamParser extends BaseParser
     private boolean hasNoFollowingBinData() throws IOException
     {
         // as suggested in PDFBOX-1164
-        final int readBytes = source.read(binCharTestArr, 0, MAX_BIN_CHAR_TEST_LENGTH);
+        final int readBytes = source.readNBytes(binCharTestArr);
         boolean noBinData = true;
         int startOpIdx = -1;
         int endOpIdx = -1;

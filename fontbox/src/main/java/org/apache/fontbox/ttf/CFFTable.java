@@ -20,6 +20,7 @@ package org.apache.fontbox.ttf;
 import java.io.IOException;
 import org.apache.fontbox.cff.CFFFont;
 import org.apache.fontbox.cff.CFFParser;
+import org.apache.pdfbox.io.RandomAccessRead;
 
 /**
  * PostScript font program (compact font format).
@@ -48,10 +49,24 @@ public class CFFTable extends TTFTable
     @Override
     void read(TrueTypeFont ttf, TTFDataStream data) throws IOException
     {
-        byte[] bytes = data.read((int)getLength());
-
         CFFParser parser = new CFFParser();
-        cffFont = parser.parse(bytes, new CFFBytesource(ttf)).get(0);
+        parser.setLoadOnlyHeaders(ttf.getLoadOnlyHeaders());
+//        assert data.getCurrentPosition() == getOffset();
+        try (RandomAccessRead subReader = data.getSubReader(getLength()))
+        {
+            if (subReader != null)
+            {
+                cffFont = parser.parse(subReader).get(0);
+                data.seek(getOffset() + getLength());
+            }
+            else
+            {
+                assert ttf.getLoadOnlyHeaders() == null
+                        : "It is inefficient to read whole CFF table to parse only headers, please use RandomAccessReadUncachedDataStream";
+                byte[] bytes = data.read((int)getLength());
+                cffFont = parser.parse(bytes, new CFFBytesource(ttf)).get(0);
+            }
+        }
 
         initialized = true;
     }

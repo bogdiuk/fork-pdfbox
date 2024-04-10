@@ -170,16 +170,7 @@ public class DataInputRandomAccessRead implements DataInput
         {
             throw new IOException("length is negative");
         }
-        if (randomAccessRead.length() - randomAccessRead.getPosition() < length)
-        {
-            throw new IOException("Premature end of buffer reached");
-        }
-        byte[] bytes = new byte[length];
-        for (int i = 0; i < length; i++)
-        {
-            bytes[i] = readByte();
-        }
-        return bytes;
+        return randomAccessRead.readExact(length);
     }
 
     @Override
