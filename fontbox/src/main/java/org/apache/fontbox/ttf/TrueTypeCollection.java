@@ -21,6 +21,7 @@ import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import org.apache.pdfbox.io.IOUtils;
 
 import org.apache.pdfbox.io.RandomAccessRead;
 import org.apache.pdfbox.io.RandomAccessReadBuffer;
@@ -68,7 +69,14 @@ public class TrueTypeCollection implements Closeable
      */
     TrueTypeCollection(RandomAccessRead randomAccessRead) throws IOException
     {
-        this.stream = new RandomAccessReadDataStream(randomAccessRead);
+        try
+        {
+            this.stream = new RandomAccessReadDataStream(randomAccessRead);
+        }
+        finally
+        {
+            IOUtils.closeQuietly(randomAccessRead);
+        }
 
         // TTC header
         String tag = stream.readTag();
