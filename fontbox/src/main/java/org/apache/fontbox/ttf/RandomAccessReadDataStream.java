@@ -19,9 +19,12 @@ package org.apache.fontbox.ttf;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 import org.apache.pdfbox.io.IOUtils;
 import org.apache.pdfbox.io.RandomAccessRead;
+import org.apache.pdfbox.io.RandomAccessReadBuffer;
 
 /**
  * An implementation of the TTFDataStream using RandomAccessRead as source.
@@ -172,6 +175,20 @@ class RandomAccessReadDataStream extends TTFDataStream
         System.arraycopy(data, currentPosition, b, off, bytesToRead);
         currentPosition += bytesToRead;
         return bytesToRead;
+    }
+
+    @Override
+    public RandomAccessRead createSubView(long length)
+    {
+        try
+        {
+            return new RandomAccessReadBuffer(data).createView(currentPosition, length);
+        }
+        catch (IOException ex)
+        {
+            Logger.getLogger(RandomAccessReadDataStream.class.getName()).log(Level.SEVERE, null, ex);
+            return null;
+        }
     }
 
     /**

@@ -55,7 +55,76 @@ public interface RandomAccessRead extends Closeable
      * @throws IOException If there was an error while reading the data.
      */
     int read(byte[] b, int offset, int length) throws IOException;
-    
+
+    /**
+     * Read a buffer of data of exactly {@code length} bytes.
+     * 
+     * @throws IOException if less than {@code length} bytes are available
+     */
+    default byte[] readExact(byte[] b, int offset, int length) throws IOException
+    {
+        if (length() - getPosition() >= length)
+        {
+            int read = readUpTo(b, offset, length);
+            if (read == length)
+            {
+                return b;
+            }
+            rewind(read);
+        }
+        throw new IOException("End-of-data");
+    }
+
+    /**
+     * Read a buffer of data of exactly {@code length} bytes.
+     * 
+     * @throws IOException if less than {@code length} bytes are available
+     */
+    default byte[] readExact(int length) throws IOException
+    {
+        return readExact(new byte[length], 0, length);
+    }
+
+    /**
+     * Finishes when {@code length} bytes are read, or EOF. Always returns {@code result}, never trims.
+     * @see InputStream#readNBytes(byte[], int, int)
+     * @return when {@code result.length} bytes are read, or EOF
+     */
+    default int readUpTo(byte[] result) throws IOException
+    {
+        return readUpTo(result, 0, result.length);
+    }
+
+    /**
+     * Finishes when {@code length} bytes are read, or EOF. Just like {@link org.apache.pdfbox.io.IOUtils#populateBuffer(java.io.InputStream, byte[])}
+     * @see InputStream#readNBytes(byte[], int, int)
+     * @return amount of read bytes
+     */
+    default int readUpTo(byte[] result, int offset, int length) throws IOException
+    {
+        if (Integer.MAX_VALUE - length < offset)
+        {
+            throw new IOException("Integer overflow");
+        }
+        int cursor = offset;
+        int end = offset + length;
+        while (cursor < end)
+        {
+            int read = read(result, cursor, end - cursor);
+            if (read < 0)
+            {
+                break;
+            }
+            else if (read == 0)
+            {
+                // in order to not get stuck in a loop we check readBytes (this should never happen)
+                throw new IOException("Read 0 bytes, risk of an infinite loop");
+            }
+            cursor += read;
+        }
+        return cursor - offset;
+    }
+
     /**
      * Returns offset of next byte to be returned by a read method.
      * 
