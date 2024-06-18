@@ -63,11 +63,15 @@ public class NamingTable extends TTFTable
         int numberOfNameRecords = data.readUnsignedShort();
         int offsetToStartOfStringStorage = data.readUnsignedShort();
         nameRecords = new ArrayList<>(numberOfNameRecords);
+        LoadOnlyHeaders onlyHeaders = ttf.getLoadOnlyHeaders();
         for (int i=0; i< numberOfNameRecords; i++)
         {
             NameRecord nr = new NameRecord();
             nr.initData(ttf, data);
-            nameRecords.add(nr);
+            if (onlyHeaders == null || isUsefulForOnlyHeaders(nr))
+            {
+                nameRecords.add(nr);
+            }
         }
 
         for (NameRecord nr : nameRecords)
@@ -80,41 +84,56 @@ public class NamingTable extends TTFTable
             }
 
             data.seek(getOffset() + (2L*3)+numberOfNameRecords*2L*6+nr.getStringOffset());
-            int platform = nr.getPlatformId();
-            int encoding = nr.getPlatformEncodingId();
-            Charset charset = StandardCharsets.ISO_8859_1;
-            if (platform == NameRecord.PLATFORM_WINDOWS && (encoding == NameRecord.ENCODING_WINDOWS_SYMBOL || encoding == NameRecord.ENCODING_WINDOWS_UNICODE_BMP))
-            {
-                charset = StandardCharsets.UTF_16;
-            }
-            else if (platform == NameRecord.PLATFORM_UNICODE)
-            {
-                charset = StandardCharsets.UTF_16;
-            }
-            else if (platform == NameRecord.PLATFORM_ISO)
-            {
-                switch (encoding)
-                {
-                    case 0:
-                        charset = StandardCharsets.US_ASCII;
-                        break;
-                    case 1:
-                        //not sure is this is correct??
-                        charset = StandardCharsets.UTF_16BE;
-                        break;
-                    case 2:
-                        charset = StandardCharsets.ISO_8859_1;
-                        break;
-                    default:
-                        break;
-                }
-            }
+            Charset charset = getCharset(nr);
             String string = data.readString(nr.getStringLength(), charset);
             nr.setString(string);
         }
 
-        // build multi-dimensional lookup table
         lookupTable = new HashMap<>(nameRecords.size());
+        fillLookupTable();
+
+        readInterestingStrings(onlyHeaders);
+
+        initialized = true;
+    }
+
+    private Charset getCharset(NameRecord nr)
+    {
+        int platform = nr.getPlatformId();
+        int encoding = nr.getPlatformEncodingId();
+        Charset charset = StandardCharsets.ISO_8859_1;
+        if (platform == NameRecord.PLATFORM_WINDOWS && (encoding == NameRecord.ENCODING_WINDOWS_SYMBOL || encoding == NameRecord.ENCODING_WINDOWS_UNICODE_BMP))
+        {
+            charset = StandardCharsets.UTF_16;
+        }
+        else if (platform == NameRecord.PLATFORM_UNICODE)
+        {
+            charset = StandardCharsets.UTF_16;
+        }
+        else if (platform == NameRecord.PLATFORM_ISO)
+        {
+            switch (encoding)
+            {
+                case 0:
+                    charset = StandardCharsets.US_ASCII;
+                    break;
+                case 1:
+                    //not sure is this is correct??
+                    charset = StandardCharsets.UTF_16BE;
+                    break;
+                case 2:
+                    charset = StandardCharsets.ISO_8859_1;
+                    break;
+                default:
+                    break;
+            }
+        }
+        return charset;
+    }
+
+    private void fillLookupTable()
+    {
+        // build multi-dimensional lookup table
         for (NameRecord nr : nameRecords)
         {
             // name id
@@ -126,7 +145,10 @@ public class NamingTable extends TTFTable
             // language id / string
             languageLookup.put(nr.getLanguageId(), nr.getString());
         }
+    }
 
+    private void readInterestingStrings(LoadOnlyHeaders onlyHeaders)
+    {
         // extract strings of interest
         fontFamily = getEnglishName(NameRecord.NAME_FONT_FAMILY_NAME);
         fontSubFamily = getEnglishName(NameRecord.NAME_FONT_SUB_FAMILY_NAME);
@@ -148,7 +170,26 @@ public class NamingTable extends TTFTable
             psName = psName.trim();
         }
 
-        initialized = true;
+        if (onlyHeaders != null)
+        {
+            onlyHeaders.setName(psName);
+            onlyHeaders.setFontFamily(fontFamily, fontSubFamily);
+        }
+    }
+
+    private static boolean isUsefulForOnlyHeaders(NameRecord nr)
+    {
+        int nameId = nr.getNameId();
+        // see "psName =" and "getEnglishName()"
+        if (nameId == NameRecord.NAME_POSTSCRIPT_NAME
+                || nameId == NameRecord.NAME_FONT_FAMILY_NAME
+                || nameId == NameRecord.NAME_FONT_SUB_FAMILY_NAME)
+        {
+            int languageId = nr.getLanguageId();
+            return languageId == NameRecord.LANGUAGE_UNICODE
+                    || languageId == NameRecord.LANGUAGE_WINDOWS_EN_US;
+        }
+        return false;
     }
 
     /**

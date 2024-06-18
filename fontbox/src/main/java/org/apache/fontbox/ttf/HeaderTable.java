@@ -74,6 +74,16 @@ public class HeaderTable extends TTFTable
     @Override
     void read(TrueTypeFont ttf, TTFDataStream data) throws IOException
     {
+        LoadOnlyHeaders outHeaders = ttf.getLoadOnlyHeaders();
+        if (outHeaders != null) {
+            // 44 == 4 + 4 + 4 + 4 + 2 + 2 + 2*8 + 4*2
+            data.seek(data.getCurrentPosition() + 44);
+            macStyle = data.readUnsignedShort();
+            outHeaders.setHeaderMacStyle(macStyle);
+            initialized = true;
+            return;
+        }
+
         version = data.read32Fixed();
         fontRevision = data.read32Fixed();
         checkSumAdjustment = data.readUnsignedInt();

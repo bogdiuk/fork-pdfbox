@@ -20,6 +20,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.pdfbox.io.IOUtils;
 import org.apache.pdfbox.io.RandomAccessRead;
 
 /**
@@ -32,6 +33,7 @@ public class TTFParser
     private static final Log LOG = LogFactory.getLog(TTFParser.class);
 
     private boolean isEmbedded = false;
+    private LoadOnlyHeaders loadOnlyHeaders;
 
     /**
      * Constructor.
@@ -60,7 +62,9 @@ public class TTFParser
      */
     public TrueTypeFont parse(RandomAccessRead randomAccessRead) throws IOException
     {
-        RandomAccessReadDataStream dataStream = new RandomAccessReadDataStream(randomAccessRead);
+        TTFDataStream dataStream = loadOnlyHeaders != null
+                ? new RandomAccessReadUnbufferedDataStream(randomAccessRead)
+                : new RandomAccessReadDataStream(randomAccessRead);
         try
         {
             return parse(dataStream);
@@ -115,6 +119,7 @@ public class TTFParser
     {
         TrueTypeFont font = newFont(raf);
         font.setVersion(raf.read32Fixed());
+        font.setLoadOnlyHeaders(loadOnlyHeaders);
         int numberOfTables = raf.readUnsignedShort();
         int searchRange = raf.readUnsignedShort();
         int entrySelector = raf.readUnsignedShort();
@@ -141,8 +146,21 @@ public class TTFParser
             }
         }
         // parse tables
-        parseTables(font);
-        return font;
+        if (loadOnlyHeaders == null)
+        {
+            parseTables(font);
+            return font;
+        }
+        else
+        {
+            parseTableHeaders(font, loadOnlyHeaders);
+            return null;
+        }
+    }
+
+    public void setLoadOnlyHeaders(LoadOnlyHeaders loadOnlyHeaders)
+    {
+        this.loadOnlyHeaders = loadOnlyHeaders;
     }
 
     TrueTypeFont newFont(TTFDataStream raf)
@@ -224,6 +242,93 @@ public class TTFParser
         if (!isEmbedded && font.getCmap() == null)
         {
             throw new IOException("'cmap' table is mandatory");
+        }
+    }
+
+    /**
+     * Based on {@link #parseTables()}.
+     * Parse all table headers and check if all needed tables are present.
+     * 
+     * This method can be optimized further by skipping unused portions inside each individual table parser
+     *
+     * @param font the TrueTypeFont instance holding the parsed data.
+     * @throws IOException If there is an error parsing the TrueType font.
+     */
+    private void parseTableHeaders(TrueTypeFont font, LoadOnlyHeaders outHeaders) throws IOException
+    {
+        try
+        {
+            font.getNaming(); // calls NamingTable.readTable();
+        }
+        catch (IOException ex)
+        {
+            return; // ignore, empty name is reported differently than exception
+        }
+        try {
+            font.getHeader(); // calls HeaderTable.readTable();
+
+            // only these 5 are used
+            //   sFamilyClass = os2WindowsMetricsTable.getFamilyClass();
+            //   usWeightClass = os2WindowsMetricsTable.getWeightClass();
+            //   ulCodePageRange1 = (int) os2WindowsMetricsTable.getCodePageRange1();
+            //   ulCodePageRange2 = (int) os2WindowsMetricsTable.getCodePageRange2();
+            //   panose = os2WindowsMetricsTable.getPanose();
+            outHeaders.setOs2Windows(font.getOS2Windows());
+
+            boolean isOTFAndPostScript;
+            if (font instanceof OpenTypeFont && ((OpenTypeFont) font).isPostScript())
+            {
+                isOTFAndPostScript = true;
+                if (((OpenTypeFont) font).isSupportedOTF())
+                {
+                    ((OpenTypeFont) font).getCFF(); // calls CFFTable.readTable();
+                }
+            }
+            else
+            {
+                isOTFAndPostScript = false;
+                TTFTable gcid = font.getTableMap().get("gcid");
+                if (gcid != null && gcid.getLength() >= LoadOnlyHeaders.BYTES_GCID)
+                {
+                    outHeaders.setNonOtfGcid142(font.getTableNBytes(gcid, LoadOnlyHeaders.BYTES_GCID));
+                }
+            }
+            outHeaders.setIsOTFAndPostScript(isOTFAndPostScript);
+
+            boolean isOTF = font instanceof OpenTypeFont;
+            boolean isPostScript = isOTF ? isOTFAndPostScript : font.tables.containsKey(CFFTable.TAG);
+
+            if (isPostScript && !isOTF)
+            {
+                loadOnlyHeaders.setException(new IOException("True Type fonts using CFF outlines are not supported"));
+                return;
+            }
+
+            // list taken from parseTables(), detect them, but don't spend time parsing
+            final String[] mandatoryTables = {
+                HeaderTable.TAG,
+                HorizontalHeaderTable.TAG,
+                MaximumProfileTable.TAG,
+                isEmbedded ? null : PostScriptTable.TAG, // in an embedded font this table is optional
+                isPostScript ? null : IndexToLocationTable.TAG,
+                isPostScript ? null : GlyphTable.TAG,
+                isEmbedded ? null : NamingTable.TAG,
+                HorizontalMetricsTable.TAG,
+                isEmbedded ? null : CmapTable.TAG,
+            };
+
+            for (String tag : mandatoryTables)
+            {
+                if (tag != null && !font.tables.containsKey(tag))
+                {
+                    loadOnlyHeaders.setException(new IOException("'" + tag + "' table is mandatory"));
+                    return;
+                }
+            }
+        } catch (IOException ex) {
+            loadOnlyHeaders.setException(ex);
+        } finally {
+            IOUtils.closeQuietly(font);
         }
     }
 

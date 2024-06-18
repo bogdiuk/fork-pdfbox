@@ -55,6 +55,7 @@ public class TrueTypeFont implements FontBoxFont, Closeable
     private final Object lockReadtable = new Object();
     private final Object lockPSNames = new Object();
     private final List<String> enabledGsubFeatures = new ArrayList<>();
+    private LoadOnlyHeaders loadOnlyHeaders;
 
     /**
      * Constructor.  Clients should use the TTFParser to create a new TrueTypeFont object.
@@ -176,6 +177,32 @@ public class TrueTypeFont implements FontBoxFont, Closeable
             readTable(table);
         }
         return table;
+    }
+
+    /**
+     * Returns the raw bytes of the given table, no more than {@code limit} bytes.
+     * 
+     * @param table the table to read.
+     * @param limit maximum length of array to return
+     * @return the raw bytes of the given table
+     * 
+     * @throws IOException if there was an error accessing the table.
+     */
+    public byte[] getTableNBytes(TTFTable table, int limit) throws IOException
+    {
+        synchronized (lockReadtable)
+        {
+            // save current position
+            long currentPosition = data.getCurrentPosition();
+            data.seek(table.getOffset());
+
+            // read all data
+            byte[] bytes = data.read(Math.min(limit, (int) table.getLength()));
+
+            // restore current position
+            data.seek(currentPosition);
+            return bytes;
+        }
     }
 
     /**
@@ -788,6 +815,15 @@ public class TrueTypeFont implements FontBoxFont, Closeable
     {
         enableGsubFeature("vrt2");
         enableGsubFeature("vert");
+    }
+
+    void setLoadOnlyHeaders(LoadOnlyHeaders loadOnlyHeaders) {
+        this.loadOnlyHeaders = loadOnlyHeaders;
+    }
+
+    /** Used by table parsers to detect 'only headers' mode */
+    LoadOnlyHeaders getLoadOnlyHeaders() {
+        return loadOnlyHeaders;
     }
 
     @Override

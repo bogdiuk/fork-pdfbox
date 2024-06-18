@@ -28,6 +28,7 @@ import java.util.Map;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.fontbox.ttf.LoadOnlyHeaders;
 import org.apache.pdfbox.io.RandomAccessRead;
 
 
@@ -48,7 +49,8 @@ public class CFFParser
 
     private String[] stringIndex = null;
     private ByteSource source;
-    
+    private LoadOnlyHeaders loadOnlyHeaders;
+
     // for debugging only
     private String debugFontName;
 
@@ -64,6 +66,11 @@ public class CFFParser
          * @throws IOException if the data could not be read
          */
         byte[] getBytes() throws IOException;
+    }
+
+    public void setLoadOnlyHeaders(LoadOnlyHeaders loadOnlyHeaders)
+    {
+        this.loadOnlyHeaders = loadOnlyHeaders;
     }
 
     /**
@@ -91,17 +98,15 @@ public class CFFParser
     public List<CFFFont> parse(RandomAccessRead randomAccessRead) throws IOException
     {
         // TODO do we need to store the source data of the font? It isn't used at all
-        byte[] bytes = new byte[(int) randomAccessRead.length()];
+        // definitely don't need 'source' in 'loadOnlyHeaders' mode
         randomAccessRead.seek(0);
-        int remainingBytes = bytes.length;
-        int amountRead;
-        while ((amountRead = randomAccessRead.read(bytes, bytes.length - remainingBytes,
-                remainingBytes)) > 0)
+        if (loadOnlyHeaders == null)
         {
-            remainingBytes -= amountRead;
+            byte[] bytes = new byte[(int) randomAccessRead.length()];
+            randomAccessRead.readUpTo(bytes);
+            randomAccessRead.seek(0);
+            this.source = new CFFBytesource(bytes);
         }
-        randomAccessRead.seek(0);
-        this.source = new CFFBytesource(bytes);
         return parse(new DataInputRandomAccessRead(randomAccessRead));
     }
 
@@ -492,6 +497,15 @@ public class CFFParser
             cffCIDFont.setSupplement(rosEntry.getNumber(2).intValue());
 
             font = cffCIDFont;
+            if (loadOnlyHeaders != null)
+            {
+                loadOnlyHeaders.setOtfROS(
+                        cffCIDFont.getRegistry(),
+                        cffCIDFont.getOrdering(),
+                        cffCIDFont.getSupplement());
+                // we just read (Registry, Ordering, Supplement) and don't need anything else
+                return font;
+            }
         }
         else
         {
@@ -501,6 +515,10 @@ public class CFFParser
         // name
         debugFontName = name;
         font.setName(name);
+        if (loadOnlyHeaders != null)
+        {
+            return font; // not a 'CFFCIDFont' => cannot read properties needed by LoadOnlyHeaders anyway
+        }
 
         // top dict
         font.addValueToTopDict("version", getString(topDict, "version"));
