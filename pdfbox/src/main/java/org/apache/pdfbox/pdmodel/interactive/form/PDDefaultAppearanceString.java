@@ -20,6 +20,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import org.apache.commons.logging.LogFactory;
 
 import org.apache.pdfbox.contentstream.operator.Operator;
 import org.apache.pdfbox.contentstream.operator.OperatorName;
@@ -37,6 +38,8 @@ import org.apache.pdfbox.pdmodel.graphics.color.PDDeviceCMYK;
 import org.apache.pdfbox.pdmodel.graphics.color.PDDeviceGray;
 import org.apache.pdfbox.pdmodel.graphics.color.PDDeviceRGB;
 import org.apache.pdfbox.pdmodel.PDAppearanceContentStream;
+import org.apache.pdfbox.pdmodel.font.PDType1Font;
+import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
 import org.apache.pdfbox.pdmodel.interactive.annotation.PDAppearanceStream;
 
 /**
@@ -165,7 +168,41 @@ public class PDDefaultAppearanceString
         PDFont font = defaultResources.getFont(fontName);
         float fontSize = ((COSNumber) base1).floatValue();
         
-        // todo: handle cases where font == null with special mapping logic (see PDFBOX-2661)
+        // handle cases where font == null with special mapping logic (see PDFBOX-2661)
+        if (font == null)
+        {
+            COSName newFontName = tryMapFontName(fontName);
+            if (newFontName != null)
+            {
+                font = defaultResources.getFont(newFontName);
+                if (font != null)
+                {
+                    LogFactory.getLog(PDDefaultAppearanceString.class).warn(
+                            "Could not find font /" + fontName.getName() + ", using /" + newFontName.getName() + " instead");
+                    defaultResources.addToDirectFontCache(fontName, font);
+                    fontName = newFontName;
+                }
+            }
+        }
+        if (font == null)
+        {
+            Standard14Fonts.FontName mapped = Standard14Fonts.getMappedFontName(fontName.getName());
+            if (mapped == null)
+            {
+                mapped = Standard14Fonts.FontName.HELVETICA;
+            }
+            LogFactory.getLog(PDDefaultAppearanceString.class).warn(
+                    "Could not find font /" + fontName.getName() + " in the document, using the default /" + mapped.getName() + " instead");
+            font = new PDType1Font(mapped);
+            if (font.isDamaged())
+            {
+                font = null;
+            }
+            else
+            {
+                defaultResources.addToDirectFontCache(fontName, font);
+            }
+        }
         if (font == null)
         {
             throw new IOException("Could not find font: /" + fontName.getName());
@@ -322,5 +359,50 @@ public class PDDefaultAppearanceString
         }
 
         // todo: other kinds of resource...
+    }
+
+    private COSName tryMapFontName(COSName fontName)
+    {
+        final String name = fontName.getName();
+        if (name == null)
+        {
+            return COSName.HELV; // default font
+        }
+        switch (name)
+        {
+            // mapping from https://issues.apache.org/jira/browse/PDFBOX-2661
+            case "Courier-BoldOblique":   return COSName.getPDFName("CoBO");
+            case "Courier-Bold":          return COSName.getPDFName("CoBo");
+            case "Courier-Oblique":       return COSName.getPDFName("CoOb");
+            case "Courier":               return COSName.getPDFName("Cour");
+            case "Helvetica-BoldOblique": return COSName.getPDFName("HeBO");
+            case "Helvetica-Bold":        return COSName.getPDFName("HeBo");
+            case "Helvetica-Oblique":     return COSName.getPDFName("HeOb");
+            case "Helvetica":             return COSName.HELV;
+            case "Symbol":                return COSName.getPDFName("Symb");
+            case "Times-BoldItalic":      return COSName.getPDFName("TiBI");
+            case "Times-Bold":            return COSName.getPDFName("TiBo");
+            case "Times-Italic":          return COSName.getPDFName("TiIt");
+            case "Times-Roman":           return COSName.getPDFName("TiRo");
+            case "ZapfDingbats":          return COSName.getPDFName("ZaDb");
+            case "HYSMyeongJo":
+            case "HYSMyeongJo-Medium":
+            case "HYSMyeongJoStd-Medium": return COSName.getPDFName("HySm");
+            case "HYGoThic":
+            case "HYGoThic-Medium":       return COSName.getPDFName("HyGo");
+            case "HeiseiMin-W3":
+            case "KozMinPro-Regular":
+            case "KanjiMincho":           return COSName.getPDFName("KaMi");
+            case "HeiseiKakuGo-W5":
+            case "KanjiGothic":           return COSName.getPDFName("KaGo");
+            case "MHei-Medium":           return COSName.getPDFName("MHei");
+            case "MSung":
+            case "MSung-Light":
+            case "MSungStd-Light":        return COSName.getPDFName("MSun");
+            case "STSong":
+            case "STSong-Light":
+            case "STSongStd-Light":       return COSName.getPDFName("STSo");
+            default:                      return COSName.HELV;
+        }
     }
 }
