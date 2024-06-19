@@ -857,4 +857,9 @@ public final class PDResources implements COSObjectable
     {
         return cache;
     }
+
+    public void addToDirectFontCache(COSName name, PDFont font)
+    {
+        directFontCache.put(name, new SoftReference<>(font));
+    }
 }
