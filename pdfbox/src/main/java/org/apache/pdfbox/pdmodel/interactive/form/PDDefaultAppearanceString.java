@@ -266,7 +266,7 @@ public class PDDefaultAppearanceString
     /**
      * Returns the font.
      */
-    PDFont getFont()
+    public PDFont getFont()
     {
         return font;
     }

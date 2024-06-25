@@ -85,7 +85,7 @@ public abstract class PDField implements COSObjectable
      * @param key the key to look up
      * @return COS value for the given key
      */
-    protected COSBase getInheritableAttribute(COSName key)
+    public final COSBase getInheritableAttribute(COSName key)
     {
         if (dictionary.containsKey(key))
         {
