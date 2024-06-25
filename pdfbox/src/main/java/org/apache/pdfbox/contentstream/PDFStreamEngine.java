@@ -356,6 +356,13 @@ public abstract class PDFStreamEngine
             // clip to bounding box
             clipToRect(bbox);
 
+            // Bohdiuk addition
+            // scroll ListBox to the first selected item
+            final Point2D.Float scroll = scrollAnnotation(annotation, appearance, bbox);
+            if (scroll != null) {
+                getGraphicsState().getCurrentTransformationMatrix().translate(scroll.x, scroll.y);
+            }
+
             // needed for patterns in appearance streams, e.g. PDFBOX-2182
             initialMatrix = aa.clone();
 
@@ -546,26 +553,26 @@ public abstract class PDFStreamEngine
         }
         try
         {
-            while (token != null)
+        while (token != null)
+        {
+            if (token instanceof Operator)
             {
-                if (token instanceof Operator)
-                {
                     if (isFirstOperator && contentStream instanceof PDType3CharProc && 
                         OperatorName.TYPE3_D1.equals(((Operator) token).getName()))
                     {
                         shouldProcessColorOperators = false;
                     }
                     isFirstOperator = false;
-                    processOperator((Operator) token, arguments);
-                    arguments.clear();
-                }
-                else
-                {
-                    arguments.add((COSBase) token);
-                }
-                token = parser.parseNextToken();
+                processOperator((Operator) token, arguments);
+                arguments.clear();
             }
+            else
+            {
+                arguments.add((COSBase) token);
+            }
+            token = parser.parseNextToken();
         }
+    }
         finally
         {
             shouldProcessColorOperators = oldShouldProcessColorOperators;
@@ -1176,6 +1183,17 @@ public abstract class PDFStreamEngine
         {
             LOG.error("level is " + level);
         }
+    }
+
+    /** Subclasses can override this method to scroll individual annotations */
+    protected Point2D.Float scrollAnnotation(PDAnnotation annotation, PDAppearanceStream appearance, PDRectangle bbox) // Bohdiuk addition
+    {
+        return null;
+    }
+
+    protected final OperatorProcessor getOperator(String name) // Bohdiuk addition
+    {
+        return operators.get(name);
     }
 
     /**
