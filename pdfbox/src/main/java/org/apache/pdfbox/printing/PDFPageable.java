@@ -31,7 +31,7 @@ import org.apache.pdfbox.pdmodel.common.PDRectangle;
  *
  * @author John Hewson
  */
-public final class PDFPageable extends Book
+public class PDFPageable extends Book
 {
     private final PDDocument document;
     private final int numberOfPages;
@@ -236,9 +236,15 @@ public final class PDFPageable extends Book
         {
             throw new IndexOutOfBoundsException(i + " >= " + numberOfPages);
         }
-        PDFPrintable printable = new PDFPrintable(document, Scaling.ACTUAL_SIZE, showPageBorder, dpi, center);
+        PDFPrintable printable = createPrintable(document, Scaling.ACTUAL_SIZE, showPageBorder, dpi, center);
         printable.setSubsamplingAllowed(subsamplingAllowed);
         printable.setRenderingHints(renderingHints);
         return printable;
+    }
+
+    protected PDFPrintable createPrintable(PDDocument document, Scaling scaling,
+            boolean showPageBorder, float dpi, boolean center)
+    {
+        return new PDFPrintable(document, scaling, showPageBorder, dpi, center);
     }
 }
