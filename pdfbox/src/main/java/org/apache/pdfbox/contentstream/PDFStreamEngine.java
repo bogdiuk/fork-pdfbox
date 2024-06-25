@@ -345,6 +345,12 @@ public abstract class PDFStreamEngine
             // clip to bounding box
             clipToRect(bbox);
 
+            // scroll ListBox to the first selected item
+            final Point2D.Float scroll = scrollAnnotation(annotation, appearance, bbox);
+            if (scroll != null) {
+                getGraphicsState().getCurrentTransformationMatrix().translate(scroll.x, scroll.y);
+            }
+
             // needed for patterns in appearance streams, e.g. PDFBOX-2182
             initialMatrix = aa.clone();
 
@@ -1148,5 +1154,14 @@ public abstract class PDFStreamEngine
         {
             LOG.error("level is " + level);
         }
+    }
+
+    /** Subclasses can override this method to scroll individual annotations */
+    protected Point2D.Float scrollAnnotation(PDAnnotation annotation, PDAppearanceStream appearance, PDRectangle bbox) {
+        return null;
+    }
+
+    protected final OperatorProcessor getOperator(String name) {
+        return operators.get(name);
     }
 }
