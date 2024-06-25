@@ -47,7 +47,7 @@ public class TrueTypeCollection implements Closeable
      */
     public TrueTypeCollection(File file) throws IOException
     {
-        this(new RandomAccessReadBufferedFile(file), true);
+        this(new RandomAccessReadBufferedFile(file), true, true);
     }
 
     /**
@@ -58,7 +58,7 @@ public class TrueTypeCollection implements Closeable
      */
     public TrueTypeCollection(InputStream stream) throws IOException
     {
-        this(new RandomAccessReadBuffer(stream), false);
+        this(new RandomAccessReadBuffer(stream), false, true);
     }
 
     /**
@@ -66,13 +66,16 @@ public class TrueTypeCollection implements Closeable
      *
      * @param randomAccessRead
      * @param closeAfterReading {@code true} to close randomAccessRead
+     * @param buffered {@code true} to use {@link RandomAccessReadDataStream}, {@code false} to use {@link RandomAccessReadUnbufferedDataStream}
      * @throws IOException If the font could not be parsed.
      */
-    private TrueTypeCollection(RandomAccessRead randomAccessRead, boolean closeAfterReading) throws IOException
+    private TrueTypeCollection(RandomAccessRead randomAccessRead, boolean closeAfterReading, boolean buffered) throws IOException
     {
         try
         {
-            this.stream = new RandomAccessReadDataStream(randomAccessRead);
+            this.stream = buffered
+                    ? new RandomAccessReadDataStream(randomAccessRead)
+                    : new RandomAccessReadUnbufferedDataStream(randomAccessRead);
         }
         finally
         {
@@ -107,7 +110,19 @@ public class TrueTypeCollection implements Closeable
             int ulDsigOffset = stream.readUnsignedShort();
         }
     }
-    
+
+    /**
+     * Creates a new TrueTypeCollection without reading the whole .ttc file.
+     * It is important to {@link #close()} the resulting {@link TrueTypeCollection} to dispose the FileChannel.
+     *
+     * @param file The TTC file.
+     * @throws IOException If the font could not be parsed.
+     */
+    public static TrueTypeCollection createUnbuffered(File file) throws IOException
+    {
+        return new TrueTypeCollection(new RandomAccessReadBufferedFile(file), false, false);
+    }
+
     /**
      * Run the callback for each TT font in the collection.
      * 
