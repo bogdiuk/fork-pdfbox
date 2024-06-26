@@ -167,7 +167,7 @@ public class CharStringCommand
     public static CharStringCommand getInstance(int b0, int b1)
     {
         CharStringCommand command = CHAR_STRING_COMMANDS.get(getKeyHashValue(b0, b1));
-        return command != null ? command : COMMAND_UNKNOWN;
+        return command != null ? command : getUnknownCommand(b0);
     }
 
     /**
@@ -186,6 +186,17 @@ public class CharStringCommand
         else if (values.length == 2)
         {
             return getInstance(values[0], values[1]);
+        }
+        return getUnknownCommand(values[0]);
+    }
+
+    private static CharStringCommand getUnknownCommand(int b0)
+    {
+        // HINTMASK(19) and CNTRMASK(20) may have parameters, so it's not easy to fit them into CHAR_STRING_COMMANDS
+        // TODO: this is a hack, should be removed in the future when HINTMASK and CNTRMASK will work
+        if (b0 == 19 || b0 == 20)
+        {
+            return CHAR_STRING_COMMANDS.get(b0);
         }
         return COMMAND_UNKNOWN;
     }
