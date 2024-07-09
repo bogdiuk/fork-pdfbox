@@ -647,7 +647,7 @@ public class PDFTextStripper extends LegacyPDFStreamEngine
                     // now
                     if (!overlap(positionY, positionHeight, maxYForLine, maxHeightForLine))
                     {
-                        writeLine(normalize(line));
+                        writeLine(line);
                         line.clear();
                         lastLineStartPosition = handleLineSeparation(current, lastPosition,
                                 lastLineStartPosition, maxHeightForLine);
@@ -711,7 +711,7 @@ public class PDFTextStripper extends LegacyPDFStreamEngine
             // print the final line
             if (!line.isEmpty())
             {
-                writeLine(normalize(line));
+                writeLine(line);
                 writeParagraphEnd();
             }
             endArticle();
@@ -1754,17 +1754,18 @@ public class PDFTextStripper extends LegacyPDFStreamEngine
     /**
      * Write a list of string containing a whole line of a document.
      * 
-     * @param line a list with the words of the given line
+     * @param glyphs a list with the glyphs of the given line
      * @throws IOException if something went wrong
      */
-    private void writeLine(List<WordWithTextPositions> line)
+    protected void writeLine(List<LineItem> glyphs)
             throws IOException
     {
+        List<WordWithTextPositions> line = normalize(glyphs);
         int numberOfStrings = line.size();
         for (int i = 0; i < numberOfStrings; i++)
         {
             WordWithTextPositions word = line.get(i);
-            writeString(word.getText(), word.getTextPositions());
+            writeString(normalizeWord(word.getText()), word.getTextPositions());
             if (i < numberOfStrings - 1)
             {
                 writeWordSeparator();
@@ -1807,7 +1808,7 @@ public class PDFTextStripper extends LegacyPDFStreamEngine
      * @param word The word that shall be processed
      * @return new word with the correct direction of the containing characters
      */
-    private String handleDirection(String word)
+    private static String handleDirection(String word)
     {
         Bidi bidi = new Bidi(word, Bidi.DIRECTION_DEFAULT_LEFT_TO_RIGHT);
 
@@ -1941,7 +1942,7 @@ public class PDFTextStripper extends LegacyPDFStreamEngine
      */
     private WordWithTextPositions createWord(String word, List<TextPosition> wordPositions)
     {
-        return new WordWithTextPositions(normalizeWord(word), wordPositions);
+        return new WordWithTextPositions(word, wordPositions);
     }
 
     /**
@@ -1951,7 +1952,7 @@ public class PDFTextStripper extends LegacyPDFStreamEngine
      * @param word Word to normalize
      * @return Normalized word
      */
-    private String normalizeWord(String word)
+    protected static String normalizeWord(String word)
     {
         StringBuilder builder = null;
         int p = 0;
@@ -2037,7 +2038,7 @@ public class PDFTextStripper extends LegacyPDFStreamEngine
     /**
      * internal marker class. Used as a place holder in a line of TextPositions.
      */
-    private static final class LineItem
+    protected static final class LineItem
     {
         public static final LineItem WORD_SEPARATOR = new LineItem();
 

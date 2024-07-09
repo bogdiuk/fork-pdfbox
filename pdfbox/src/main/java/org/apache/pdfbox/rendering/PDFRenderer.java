@@ -26,6 +26,7 @@ import java.awt.image.BufferedImage;
 import java.io.IOException;
 import org.apache.pdfbox.cos.COSName;
 import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.PDDocumentCatalog;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDPageTree;
 import org.apache.pdfbox.pdmodel.PDResources;
@@ -447,7 +448,17 @@ public class PDFRenderer
      */
     public boolean isGroupEnabled(PDOptionalContentGroup group)
     {
-        PDOptionalContentProperties ocProperties = document.getDocumentCatalog().getOCProperties();
+        return isGroupEnabled(document.getDocumentCatalog(), group);
+    }
+
+    /**
+     * Indicates whether an optional content group is enabled.
+     * @param group the group
+     * @return true if the group is enabled
+     */
+    public static boolean isGroupEnabled(PDDocumentCatalog catalog, PDOptionalContentGroup group)
+    {
+        PDOptionalContentProperties ocProperties = catalog.getOCProperties();
         return ocProperties == null || ocProperties.isGroupEnabled(group);
     }
 

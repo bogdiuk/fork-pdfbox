@@ -69,6 +69,7 @@ import org.apache.pdfbox.cos.COSArray;
 import org.apache.pdfbox.cos.COSBase;
 import org.apache.pdfbox.cos.COSDictionary;
 import org.apache.pdfbox.cos.COSName;
+import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDResources;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.apache.pdfbox.pdmodel.common.function.PDFunction;
@@ -2075,13 +2076,18 @@ public class PageDrawer extends PDFGraphicsStreamEngine
 
     private boolean isHiddenOCG(PDPropertyList propertyList)
     {
+        return isHiddenOCG(getRenderer().document, destination, propertyList);
+    }
+
+    public static boolean isHiddenOCG(PDDocument document, RenderDestination destination, PDPropertyList propertyList)
+    {
         if (propertyList instanceof PDOptionalContentGroup)
         {
             PDOptionalContentGroup group = (PDOptionalContentGroup) propertyList;
             RenderState printState = group.getRenderState(destination);
             if (printState == null)
             {
-                if (!getRenderer().isGroupEnabled(group))
+                if (!PDFRenderer.isGroupEnabled(document.getDocumentCatalog(), group))
                 {
                     return true;
                 }
@@ -2093,12 +2099,12 @@ public class PageDrawer extends PDFGraphicsStreamEngine
         }
         else if (propertyList instanceof PDOptionalContentMembershipDictionary)
         {
-            return isHiddenOCMD((PDOptionalContentMembershipDictionary) propertyList);
+            return isHiddenOCMD(document, destination, (PDOptionalContentMembershipDictionary) propertyList);
         }
         return false;
     }
 
-    private boolean isHiddenOCMD(PDOptionalContentMembershipDictionary ocmd)
+    private static boolean isHiddenOCMD(PDDocument document, RenderDestination destination, PDOptionalContentMembershipDictionary ocmd)
     {
         if (ocmd.getCOSObject().getCOSArray(COSName.VE) != null)
         {
@@ -2111,7 +2117,7 @@ public class PageDrawer extends PDFGraphicsStreamEngine
             return false;
         }
         List<Boolean> visibles = new ArrayList<>();
-        oCGs.forEach(prop -> visibles.add(!isHiddenOCG(prop)));
+        oCGs.forEach(prop -> visibles.add(!isHiddenOCG(document, destination, prop)));
         COSName visibilityPolicy = ocmd.getVisibilityPolicy();
         
         // visible if any of the entries in OCGs are OFF
