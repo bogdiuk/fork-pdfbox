@@ -21,6 +21,7 @@ import org.apache.pdfbox.cos.COSArray;
 import org.apache.pdfbox.cos.COSBase;
 import org.apache.pdfbox.cos.COSDictionary;
 import org.apache.pdfbox.cos.COSName;
+import org.apache.pdfbox.cos.COSObject;
 
 /**
  * A PDField factory.
@@ -113,7 +114,8 @@ public final class PDFieldFactory
         // BJL: I have found that the radio flag bit is not always set
         // and that sometimes there is just a kids dictionary.
         // so, if there is a kids dictionary then it must be a radio button group.
-        if ((flags & PDButton.FLAG_RADIO) != 0)
+        if ((flags & PDButton.FLAG_RADIO) != 0
+                || containsRadios(field.getCOSArray(COSName.KIDS)))
         {
             return new PDRadioButton(form, field, parent);
         }
@@ -125,6 +127,28 @@ public final class PDFieldFactory
         {
             return new PDCheckBox(form, field, parent);
         }
+    }
+
+    private static boolean containsRadios(COSArray kids)
+    {
+        if (kids != null)
+        {
+            for (COSBase kidId : kids)
+            {
+                if (kidId instanceof COSObject)
+                {
+                    final COSBase kid = ((COSObject) kidId).getObject();
+                    if (kid instanceof COSDictionary)
+                    {
+                        if ((((COSDictionary) kid).getInt(COSName.FF, 0) & PDButton.FLAG_RADIO) != 0)
+                        {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+        return false;
     }
 
     private static String findFieldType(COSDictionary dic)
