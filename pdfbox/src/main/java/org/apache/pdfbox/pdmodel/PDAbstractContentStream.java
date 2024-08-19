@@ -76,6 +76,7 @@ import org.apache.pdfbox.util.StringUtil;
 abstract class PDAbstractContentStream implements Closeable
 {
     private static final Log LOG = LogFactory.getLog(PDAbstractContentStream.class);
+    private static final Set<String> LOG_FONT_NOT_EMBEDDED = new HashSet<>();
 
     protected final PDDocument document; // may be null
 
@@ -191,7 +192,9 @@ abstract class PDAbstractContentStream implements Closeable
         }
         else if (!font.isEmbedded() && !font.isStandard14())
         {
-            LOG.warn("attempting to use font '" + font.getName() + "' that isn't embedded");
+            if (LOG_FONT_NOT_EMBEDDED.add(font.getName())) {
+                LOG.warn("attempting to use font '" + font.getName() + "' that isn't embedded");
+            }
         }
 
         // complex text layout

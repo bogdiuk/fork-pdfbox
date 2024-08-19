@@ -23,8 +23,10 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.fontbox.EncodedFont;
@@ -48,6 +50,7 @@ import org.apache.pdfbox.util.Matrix;
 
 
 import static org.apache.pdfbox.pdmodel.font.UniUtil.getUniNameOfCodePoint;
+import org.apache.pdfbox.pdmodel.font.encoding.GlyphList;
 import org.apache.pdfbox.pdmodel.font.encoding.SymbolEncoding;
 
 /**
@@ -95,6 +98,8 @@ public class PDType1Font extends PDSimpleFont implements PDVectorFont
     private final Map<Integer, byte[]> codeToBytesMap = new HashMap<>();
     private Matrix fontMatrix;
     private BoundingBox fontBBox;
+    private Set<Integer> cannotEncodeLogged; // for logging
+    private byte cannotEncodeFallback;
 
     /**
      * Creates a Type 1 standard 14 font for embedding.
@@ -391,60 +396,132 @@ public class PDType1Font extends PDSimpleFont implements PDVectorFont
     }
 
     @Override
-    protected byte[] encode(int unicode) throws IOException
+    protected byte[] encode(int unicode)
     {
         byte[] bytes = codeToBytesMap.get(unicode);
-        if (bytes != null)
+        if (bytes == null)
         {
-            return bytes;
-        }
-
-        String name = getGlyphList().codePointToName(unicode);
-        if (isStandard14())
-        {
-            // genericFont not needed, thus simplified code
-            // this is important on systems with no installed fonts
-            if (!encoding.contains(name))
+            String name = getGlyphList().codePointToName(unicode);
+            try
             {
-                throw new IllegalArgumentException(
-                        String.format("U+%04X ('%s') is not available in the font %s, encoding: %s",
-                                unicode, name, getName(), encoding.getEncodingName()));
+                bytes = encodeTry(name);
             }
-            if (".notdef".equals(name))
+            catch (Throwable th)
             {
-                throw new IllegalArgumentException(
-                        String.format("No glyph for U+%04X in the font %s", unicode, getName()));
+                LOG.warn("Cannot encode '" + name + "'", th);
             }
-        }
-        else
-        {
-            if (!encoding.contains(name))
+            if (bytes == null)
             {
-                throw new IllegalArgumentException(
-                        String.format("U+%04X ('%s') is not available in the font %s (generic: %s), encoding: %s",
-                                unicode, name, getName(), genericFont.getName(), encoding.getEncodingName()));
+                bytes = new byte[] { encodeAndLogFallback(unicode, name) };
             }
-
-            String nameInFont = getNameInFont(name);
-
-            if (".notdef".equals(nameInFont) || !genericFont.hasGlyph(nameInFont))
-            {
-                throw new IllegalArgumentException(
-                        String.format("No glyph for U+%04X in the font %s (generic: %s)", unicode, getName(), genericFont.getName()));
-            }
+            codeToBytesMap.put(unicode, bytes);
         }
-
-        Map<String, Integer> inverted = encoding.getNameToCodeMap();
-        int code = inverted.get(name);
-        if (code < 0)
-        {
-            throw new IllegalArgumentException(
-                    String.format("U+%04X ('%s') is not available in the font %s (generic: %s), encoding: %s",
-                            unicode, name, getName(), genericFont.getName(), encoding.getEncodingName()));
-        }
-        bytes = new byte[] { (byte)code };
-        codeToBytesMap.put(unicode, bytes);
         return bytes;
+    }
+
+    private byte[] encodeTry(String name) throws IOException
+    {
+        if (!".notdef".equals(name))
+        {
+            final Integer code = encoding.getNameToCodeMap().get(name);
+            if (code != null && code >= 0)
+            {
+                if (!isStandard14())
+                {
+                    String nameInFont = getNameInFont(name);
+                    if (".notdef".equals(nameInFont) || !genericFont.hasGlyph(nameInFont))
+                    {
+                        return null;
+                    }
+                }
+                return new byte[] { code.byteValue() };
+            }
+        }
+        return null;
+    }
+    
+    private byte encodeAndLogFallback(int unicode, String name)
+    {
+        if (cannotEncodeLogged == null || !cannotEncodeLogged.contains(unicode))
+        {
+            if (cannotEncodeLogged == null)
+            {
+                cannotEncodeLogged = new HashSet<>();
+            }
+            cannotEncodeLogged.add(unicode);
+            String fontName;
+            if (isStandard14())
+            {
+                fontName = getName();
+            }
+            else
+            {
+                try
+                {
+                    fontName = getName() + " (generic: " + genericFont.getName() + ")";
+                }
+                catch (IOException ex)
+                {
+                    LOG.error(ex);
+                    fontName = getName() + " (generic: <EXCEPTION>)";
+                }
+            }
+            LOG.error(String.format("U+%04X ('%s') is not available in the font %s, encoding: %s",
+                        unicode, name, fontName,
+                        encoding.getEncodingName()));
+
+            cannotEncodeFallback = fallbackGlyph();
+        }
+        if (Character.isSpaceChar(unicode)) // '.isWhitespace()' doesn't include NBSP
+        {
+            // no need to use a question mark for an invisible glyph
+            return ' '; // we assume that space is always at 32nd position
+        }
+        return cannotEncodeFallback;
+    }
+
+    private byte fallbackGlyph() {
+        final GlyphList glyphs = getGlyphList();
+        String name = glyphs.codePointToName(0xFFFD); // U+FFFD == REPLACEMENT CHARACTER
+        if (name == null || ".notdef".equals(name) || !encoding.contains(name))
+        {
+            name = glyphs.codePointToName('\u00bf'); // 'iquest' - inverted question mark
+            if (name == null || ".notdef".equals(name) || !encoding.contains(name))
+            {
+                name = glyphs.codePointToName('?');
+                if (name == null || ".notdef".equals(name) || !encoding.contains(name))
+                {
+                    name = "space";
+                }
+            }
+        }
+        // if "isStandard14()", genericFont not needed, thus simplified code
+        // this is important on systems with no installed fonts
+        boolean fail = false;
+        if (!isStandard14())
+        {
+            try
+            {
+                String nameInFont = getNameInFont(name);
+                fail = ".notdef".equals(nameInFont) || !genericFont.hasGlyph(nameInFont);
+            }
+            catch (IOException ex)
+            {
+                LOG.error(null, ex);
+                fail = true;
+            }
+        }
+        
+        if (!fail)
+        {
+            Map<String, Integer> inverted = encoding.getNameToCodeMap();
+            Integer code = inverted.get(name);
+            if (code != null && code >= 0)
+            {
+                return code.byteValue();
+            }
+        }
+        return '?';
     }
 
     @Override
