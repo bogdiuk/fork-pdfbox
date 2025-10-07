@@ -93,7 +93,7 @@ class AppearanceGeneratorHelper
     /**
      * The minimum/maximum font sizes used for multiline text auto sizing
      */
-    private static final float MINIMUM_FONT_SIZE = 4;
+    private static final float MINIMUM_FONT_SIZE = 12;
     private static final float MAXIMUM_FONT_SIZE = 300;
     
     /**
@@ -885,12 +885,10 @@ class AppearanceGeneratorHelper
      */
     private float calculateFontSize(PDFont font, PDRectangle contentRect) throws IOException
     {
-        float fontSize = defaultAppearance.getFontSize();
-        
-        // zero is special, it means the text is auto-sized
-        if (Float.compare(fontSize, 0) == 0)
+        // precondition: it's only called when 'defaultAppearance.getFontSize() ~= 0'
+        if (isMultiLine())
         {
-            if (isMultiLine())
+            if (MINIMUM_FONT_SIZE < DEFAULT_FONT_SIZE)
             {
                 PlainText textContent = new PlainText(value);
                 if (textContent.getParagraphs() != null)
@@ -919,12 +917,12 @@ class AppearanceGeneratorHelper
                     }
                     return Math.min(fs, DEFAULT_FONT_SIZE);
                 }
-                
-                // Acrobat defaults to 12 for multiline text with size 0
-                return DEFAULT_FONT_SIZE;
             }
-            else
-            {
+            // Acrobat defaults to 12 for multiline text with size 0
+            return DEFAULT_FONT_SIZE;
+        }
+        else
+        {
                 Matrix fontMatrix = font.getFontMatrix();
                 float yScalingFactor = FONTSCALE * fontMatrix.getScaleY();
                 float xScalingFactor = FONTSCALE * fontMatrix.getScaleX();
@@ -949,9 +947,7 @@ class AppearanceGeneratorHelper
                 }
                 
                 return Math.min(heightBasedFontSize, widthBasedFontSize);
-            }
         }
-        return fontSize;
     }
 
     /*

@@ -287,7 +287,7 @@ public class PDPage implements COSObjectable, PDContentStream
                 }
                 catch (IOException exception)
                 {
-                    LOG.warn("malformed substream of content stream skipped");
+                    LOG.warn("malformed substream of content stream skipped", exception);
                 }
             });
             if (!inputStreams.isEmpty())
